@@ -1,0 +1,7 @@
+# IDE and environment files
+.idea/
+.venv/
+__pycache__/
+
+# Exclude ticker CSV files
+tickers/**/*.csv

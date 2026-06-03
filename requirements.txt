@@ -1,0 +1,7 @@
+yfinance
+pandas
+pymongo
+pytest
+mongomock
+pytest-mock
+pandas_market_calendars
