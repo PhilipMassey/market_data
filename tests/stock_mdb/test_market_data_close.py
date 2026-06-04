@@ -1,6 +1,7 @@
 import pytest
 import pandas as pd
 import mongomock
+from datetime import datetime
 from unittest.mock import patch
 from stock_mdb.market_data_close import (
     find_missing_dates_in_db,
@@ -55,11 +56,11 @@ def test_find_missing_dates_all_missing(mock_db_close):
 
 def test_find_missing_dates_some_existing(mock_db_close):
     """
-    Test when some records already exist in the database.
+    Test when some records already exist in the database in the wide format.
     """
     mock_db_close.insert_many([
-        {"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0},
-        {"ticker": "MSFT", "date": "2026-05-20", "close_price": 300.0}
+        {"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0},
+        {"Date": datetime(2026, 5, 20, 0, 0), "MSFT": 300.0}
     ])
     
     tickers = ["AAPL", "MSFT"]
@@ -76,10 +77,8 @@ def test_find_missing_dates_none_missing(mock_db_close):
     Test when all expected records already exist in the database.
     """
     mock_db_close.insert_many([
-        {"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0},
-        {"ticker": "AAPL", "date": "2026-05-20", "close_price": 151.0},
-        {"ticker": "MSFT", "date": "2026-05-19", "close_price": 299.0},
-        {"ticker": "MSFT", "date": "2026-05-20", "close_price": 300.0}
+        {"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0, "MSFT": 299.0},
+        {"Date": datetime(2026, 5, 20, 0, 0), "AAPL": 151.0, "MSFT": 300.0}
     ])
     
     tickers = ["AAPL", "MSFT"]
@@ -98,7 +97,7 @@ def test_download_and_insert_missing_close_prices_success(
     mock_db_close
 ):
     """
-    Test the full workflow when missing data needs to be downloaded and inserted.
+    Test the full workflow when missing data needs to be downloaded and upserted in wide format.
     """
     # 1. Setup mock calendar and tickers
     mock_get_calendar.return_value = ["2026-05-19", "2026-05-20"]
@@ -123,15 +122,13 @@ def test_download_and_insert_missing_close_prices_success(
     mock_get_all_tickers.assert_called_once()
     mock_yf_download.assert_called_once_with(["AAPL", "MSFT"], start="2026-05-19", end="2026-05-21", progress=False)
     
-    # 5. Verify records were inserted in DB
+    # 5. Verify wide records were inserted/updated in DB
     inserted = list(mock_db_close.find({}, {"_id": 0}))
-    assert len(inserted) == 4
+    assert len(inserted) == 2 # 2 dates
     
     # Check that entries exist with correct structure
-    assert {"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0} in inserted
-    assert {"ticker": "AAPL", "date": "2026-05-20", "close_price": 152.0} in inserted
-    assert {"ticker": "MSFT", "date": "2026-05-19", "close_price": 300.0} in inserted
-    assert {"ticker": "MSFT", "date": "2026-05-20", "close_price": 305.0} in inserted
+    assert {"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0, "MSFT": 300.0} in inserted
+    assert {"Date": datetime(2026, 5, 20, 0, 0), "AAPL": 152.0, "MSFT": 305.0} in inserted
 
 @patch('stock_mdb.market_data_close.get_nyse_calendar_past_year')
 @patch('stock_mdb.market_data_close.get_all_tickers')
@@ -150,7 +147,7 @@ def test_download_and_insert_missing_close_prices_no_missing(
     mock_get_all_tickers.return_value = ["AAPL"]
     
     # 2. Populate the DB with the expected data
-    mock_db_close.insert_one({"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0})
+    mock_db_close.insert_one({"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0})
     
     # 3. Call the function
     download_and_insert_missing_close_prices()
@@ -160,4 +157,4 @@ def test_download_and_insert_missing_close_prices_no_missing(
     
     # 5. Verify DB contents remain identical
     inserted = list(mock_db_close.find({}, {"_id": 0}))
-    assert inserted == [{"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0}]
+    assert inserted == [{"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0}]
