@@ -112,3 +112,17 @@ Stop and ask for clarification if you notice yourself:
 - Feeling uncertain but proceeding anyway to avoid “bothering” the user
 
 These are the exact failure modes this file exists to prevent.
+
+-----
+
+## Command Guidelines
+
+### Virtual Environment & Python Execution
+- Always use the local virtualenv Python interpreter: `.venv/bin/python`
+- To run daily database close maintenance: `.venv/bin/python stock_mdb/market_data_close.py`
+- To run database migration: `.venv/bin/python database/migrate_to_sqlite.py`
+
+### Test Commands
+- To run the full test suite: `.venv/bin/pytest`
+- To run a specific test file: `.venv/bin/pytest tests/path/to/test_file.py`
+- Tests use in-memory SQLite and mocked DB interfaces. Do not attempt to interact with real files/databases in unit tests.
