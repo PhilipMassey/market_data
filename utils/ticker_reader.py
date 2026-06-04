@@ -130,11 +130,8 @@ def get_all_tickers() -> List[str]:
     """
     master_set = set()
     
-    # 1. Get tickers from all simple list directories
+    # Get tickers from all simple list directories
     master_set.update(get_tickers_from_directory('ALL_FOLDERS'))
-        
-    # 2. Get tickers from the primary portfolio (assumes it's in the 'Holding' folder)
-    master_set.update(get_tickers_from_portfolio('Holding', 'Portfolio_Positions'))
     
     return sorted(list(master_set))
 
