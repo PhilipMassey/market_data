@@ -1,5 +1,6 @@
 import pytest
 import mongomock
+from datetime import datetime
 from unittest.mock import patch
 from database.database_utils import get_close_price_records
 
@@ -25,16 +26,27 @@ def test_get_close_price_records_empty_inputs(mock_db_close):
 
 def test_get_close_price_records_matching_query(mock_db_close):
     """
-    Test that get_close_price_records returns only documents matching BOTH the tickers and dates.
-    Also verifies that the '_id' field is excluded.
+    Test that get_close_price_records returns matching documents in the wide format,
+    correctly converting dates and projecting only requested tickers.
     """
-    # 1. Populate the mock database
+    # 1. Populate the mock database with wide format documents
     mock_db_close.insert_many([
-        {"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0},
-        {"ticker": "AAPL", "date": "2026-05-20", "close_price": 152.0},
-        {"ticker": "MSFT", "date": "2026-05-19", "close_price": 300.0},
-        {"ticker": "MSFT", "date": "2026-05-21", "close_price": 305.0}, # Different date
-        {"ticker": "GOOGL", "date": "2026-05-19", "close_price": 170.0}  # Different ticker
+        {
+            "Date": datetime(2026, 5, 19, 0, 0),
+            "AAPL": 150.0,
+            "MSFT": 300.0,
+            "GOOGL": 170.0
+        },
+        {
+            "Date": datetime(2026, 5, 20, 0, 0),
+            "AAPL": 152.0,
+            "MSFT": 302.0
+        },
+        {
+            "Date": datetime(2026, 5, 21, 0, 0),
+            "AAPL": 153.0,
+            "GOOGL": 172.0
+        }
     ])
 
     # 2. Query for AAPL and MSFT on 2026-05-19 and 2026-05-20
@@ -43,13 +55,14 @@ def test_get_close_price_records_matching_query(mock_db_close):
     
     records = get_close_price_records(tickers, dates)
     
-    # 3. Assert correct matching
-    assert len(records) == 3
+    # 3. Assert correct matching and projection
+    assert len(records) == 2
     
     # Exclude _id must be verified
     for r in records:
         assert "_id" not in r
+        assert "Date" in r
         
-    assert {"ticker": "AAPL", "date": "2026-05-19", "close_price": 150.0} in records
-    assert {"ticker": "AAPL", "date": "2026-05-20", "close_price": 152.0} in records
-    assert {"ticker": "MSFT", "date": "2026-05-19", "close_price": 300.0} in records
+    # Check that GOOGL was excluded and wide dict values are preserved
+    assert {"Date": "2026-05-19", "AAPL": 150.0, "MSFT": 300.0} in records
+    assert {"Date": "2026-05-20", "AAPL": 152.0, "MSFT": 302.0} in records
