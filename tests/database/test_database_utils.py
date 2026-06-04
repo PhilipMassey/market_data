@@ -1,22 +1,37 @@
 import pytest
-import mongomock
-from datetime import datetime
+import sqlite3
+from contextlib import contextmanager
 from unittest.mock import patch
 from database.database_utils import get_close_price_records
 
 @pytest.fixture
-def mock_db_close():
+def mock_sqlite_conn():
     """
-    Fixture that creates a mock MongoDB collection and patches db_close in the target module.
+    Fixture that creates an in-memory SQLite database and patches get_sqlite_conn.
     """
-    client = mongomock.MongoClient()
-    db = client['stock_market']
-    mock_collection = db['market_data_close']
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE market_data_close (
+            date TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            close_price REAL NOT NULL,
+            PRIMARY KEY (date, ticker)
+        )
+    """)
+    conn.commit()
     
-    with patch('database.database_utils.db_close', mock_collection):
-        yield mock_collection
+    @contextmanager
+    def _get_conn():
+        yield conn
+        conn.commit()
+        
+    with patch('database.database_utils.get_sqlite_conn', _get_conn):
+        yield conn
+        
+    conn.close()
 
-def test_get_close_price_records_empty_inputs(mock_db_close):
+def test_get_close_price_records_empty_inputs(mock_sqlite_conn):
     """
     Test get_close_price_records with empty tickers or dates.
     """
@@ -24,30 +39,25 @@ def test_get_close_price_records_empty_inputs(mock_db_close):
     assert get_close_price_records(["AAPL"], []) == []
     assert get_close_price_records([], ["2026-05-19"]) == []
 
-def test_get_close_price_records_matching_query(mock_db_close):
+def test_get_close_price_records_matching_query(mock_sqlite_conn):
     """
-    Test that get_close_price_records returns matching documents in the wide format,
-    correctly converting dates and projecting only requested tickers.
+    Test that get_close_price_records queries matching normalized rows in SQLite
+    and returns them in wide format.
     """
-    # 1. Populate the mock database with wide format documents
-    mock_db_close.insert_many([
-        {
-            "Date": datetime(2026, 5, 19, 0, 0),
-            "AAPL": 150.0,
-            "MSFT": 300.0,
-            "GOOGL": 170.0
-        },
-        {
-            "Date": datetime(2026, 5, 20, 0, 0),
-            "AAPL": 152.0,
-            "MSFT": 302.0
-        },
-        {
-            "Date": datetime(2026, 5, 21, 0, 0),
-            "AAPL": 153.0,
-            "GOOGL": 172.0
-        }
+    # 1. Populate the in-memory SQLite database
+    cursor = mock_sqlite_conn.cursor()
+    cursor.executemany("""
+        INSERT INTO market_data_close (date, ticker, close_price)
+        VALUES (?, ?, ?)
+    """, [
+        ("2026-05-19", "AAPL", 150.0),
+        ("2026-05-19", "MSFT", 300.0),
+        ("2026-05-19", "GOOGL", 170.0),
+        ("2026-05-20", "AAPL", 152.0),
+        ("2026-05-20", "MSFT", 302.0),
+        ("2026-05-21", "AAPL", 153.0)
     ])
+    mock_sqlite_conn.commit()
 
     # 2. Query for AAPL and MSFT on 2026-05-19 and 2026-05-20
     tickers = ["AAPL", "MSFT"]
@@ -55,14 +65,8 @@ def test_get_close_price_records_matching_query(mock_db_close):
     
     records = get_close_price_records(tickers, dates)
     
-    # 3. Assert correct matching and projection
+    # 3. Assert correct wide-format matching and sorting
     assert len(records) == 2
     
-    # Exclude _id must be verified
-    for r in records:
-        assert "_id" not in r
-        assert "Date" in r
-        
-    # Check that GOOGL was excluded and wide dict values are preserved
-    assert {"Date": "2026-05-19", "AAPL": 150.0, "MSFT": 300.0} in records
-    assert {"Date": "2026-05-20", "AAPL": 152.0, "MSFT": 302.0} in records
+    assert records[0] == {"Date": "2026-05-19", "AAPL": 150.0, "MSFT": 300.0}
+    assert records[1] == {"Date": "2026-05-20", "AAPL": 152.0, "MSFT": 302.0}

@@ -1,7 +1,8 @@
 import pytest
 import pandas as pd
-import mongomock
+import sqlite3
 from datetime import datetime
+from contextlib import contextmanager
 from unittest.mock import patch
 from stock_mdb.market_data_close import (
     find_missing_dates_in_db,
@@ -22,18 +23,33 @@ class MockYFData:
         raise KeyError(key)
 
 @pytest.fixture
-def mock_db_close():
+def mock_sqlite_conn():
     """
-    Fixture that creates a mock MongoDB collection and patches db_close in the target module.
+    Fixture that creates an in-memory SQLite database and patches get_sqlite_conn.
     """
-    client = mongomock.MongoClient()
-    db = client['stock_market']
-    mock_collection = db['market_data_close']
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE market_data_close (
+            date TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            close_price REAL NOT NULL,
+            PRIMARY KEY (date, ticker)
+        )
+    """)
+    conn.commit()
     
-    with patch('stock_mdb.market_data_close.db_close', mock_collection):
-        yield mock_collection
+    @contextmanager
+    def _get_conn():
+        yield conn
+        conn.commit()
+        
+    with patch('stock_mdb.market_data_close.get_sqlite_conn', _get_conn):
+        yield conn
+        
+    conn.close()
 
-def test_find_missing_dates_empty_inputs(mock_db_close):
+def test_find_missing_dates_empty_inputs(mock_sqlite_conn):
     """
     Test find_missing_dates_in_db with empty input parameters.
     """
@@ -41,7 +57,7 @@ def test_find_missing_dates_empty_inputs(mock_db_close):
     assert find_missing_dates_in_db(["AAPL"], []) == {}
     assert find_missing_dates_in_db([], ["2026-05-19"]) == {}
 
-def test_find_missing_dates_all_missing(mock_db_close):
+def test_find_missing_dates_all_missing(mock_sqlite_conn):
     """
     Test when no records exist in the database, meaning all dates are missing.
     """
@@ -54,14 +70,19 @@ def test_find_missing_dates_all_missing(mock_db_close):
         "MSFT": ["2026-05-19", "2026-05-20"]
     }
 
-def test_find_missing_dates_some_existing(mock_db_close):
+def test_find_missing_dates_some_existing(mock_sqlite_conn):
     """
-    Test when some records already exist in the database in the wide format.
+    Test when some records already exist in the database.
     """
-    mock_db_close.insert_many([
-        {"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0},
-        {"Date": datetime(2026, 5, 20, 0, 0), "MSFT": 300.0}
+    cursor = mock_sqlite_conn.cursor()
+    cursor.executemany("""
+        INSERT INTO market_data_close (date, ticker, close_price)
+        VALUES (?, ?, ?)
+    """, [
+        ("2026-05-19", "AAPL", 150.0),
+        ("2026-05-20", "MSFT", 300.0)
     ])
+    mock_sqlite_conn.commit()
     
     tickers = ["AAPL", "MSFT"]
     expected_dates = ["2026-05-19", "2026-05-20"]
@@ -72,14 +93,21 @@ def test_find_missing_dates_some_existing(mock_db_close):
         "MSFT": ["2026-05-19"]
     }
 
-def test_find_missing_dates_none_missing(mock_db_close):
+def test_find_missing_dates_none_missing(mock_sqlite_conn):
     """
     Test when all expected records already exist in the database.
     """
-    mock_db_close.insert_many([
-        {"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0, "MSFT": 299.0},
-        {"Date": datetime(2026, 5, 20, 0, 0), "AAPL": 151.0, "MSFT": 300.0}
+    cursor = mock_sqlite_conn.cursor()
+    cursor.executemany("""
+        INSERT INTO market_data_close (date, ticker, close_price)
+        VALUES (?, ?, ?)
+    """, [
+        ("2026-05-19", "AAPL", 150.0),
+        ("2026-05-19", "MSFT", 299.0),
+        ("2026-05-20", "AAPL", 151.0),
+        ("2026-05-20", "MSFT", 300.0)
     ])
+    mock_sqlite_conn.commit()
     
     tickers = ["AAPL", "MSFT"]
     expected_dates = ["2026-05-19", "2026-05-20"]
@@ -94,10 +122,10 @@ def test_download_and_insert_missing_close_prices_success(
     mock_yf_download,
     mock_get_all_tickers,
     mock_get_calendar,
-    mock_db_close
+    mock_sqlite_conn
 ):
     """
-    Test the full workflow when missing data needs to be downloaded and upserted in wide format.
+    Test the full workflow when missing data needs to be downloaded and upserted in SQLite.
     """
     # 1. Setup mock calendar and tickers
     mock_get_calendar.return_value = ["2026-05-19", "2026-05-20"]
@@ -122,13 +150,17 @@ def test_download_and_insert_missing_close_prices_success(
     mock_get_all_tickers.assert_called_once()
     mock_yf_download.assert_called_once_with(["AAPL", "MSFT"], start="2026-05-19", end="2026-05-21", progress=False)
     
-    # 5. Verify wide records were inserted/updated in DB
-    inserted = list(mock_db_close.find({}, {"_id": 0}))
-    assert len(inserted) == 2 # 2 dates
+    # 5. Verify records were inserted in SQLite DB
+    cursor = mock_sqlite_conn.cursor()
+    cursor.execute("SELECT date, ticker, close_price FROM market_data_close")
+    inserted = cursor.fetchall()
     
-    # Check that entries exist with correct structure
-    assert {"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0, "MSFT": 300.0} in inserted
-    assert {"Date": datetime(2026, 5, 20, 0, 0), "AAPL": 152.0, "MSFT": 305.0} in inserted
+    assert len(inserted) == 4
+    
+    assert ("2026-05-19", "AAPL", 150.0) in inserted
+    assert ("2026-05-20", "AAPL", 152.0) in inserted
+    assert ("2026-05-19", "MSFT", 300.0) in inserted
+    assert ("2026-05-20", "MSFT", 305.0) in inserted
 
 @patch('stock_mdb.market_data_close.get_nyse_calendar_past_year')
 @patch('stock_mdb.market_data_close.get_all_tickers')
@@ -137,7 +169,7 @@ def test_download_and_insert_missing_close_prices_no_missing(
     mock_yf_download,
     mock_get_all_tickers,
     mock_get_calendar,
-    mock_db_close
+    mock_sqlite_conn
 ):
     """
     Test that no download or insertion occurs if the database is already fully populated.
@@ -147,7 +179,9 @@ def test_download_and_insert_missing_close_prices_no_missing(
     mock_get_all_tickers.return_value = ["AAPL"]
     
     # 2. Populate the DB with the expected data
-    mock_db_close.insert_one({"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0})
+    cursor = mock_sqlite_conn.cursor()
+    cursor.execute("INSERT INTO market_data_close (date, ticker, close_price) VALUES ('2026-05-19', 'AAPL', 150.0)")
+    mock_sqlite_conn.commit()
     
     # 3. Call the function
     download_and_insert_missing_close_prices()
@@ -156,5 +190,6 @@ def test_download_and_insert_missing_close_prices_no_missing(
     mock_yf_download.assert_not_called()
     
     # 5. Verify DB contents remain identical
-    inserted = list(mock_db_close.find({}, {"_id": 0}))
-    assert inserted == [{"Date": datetime(2026, 5, 19, 0, 0), "AAPL": 150.0}]
+    cursor.execute("SELECT date, ticker, close_price FROM market_data_close")
+    inserted = cursor.fetchall()
+    assert inserted == [("2026-05-19", "AAPL", 150.0)]
