@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": "${command:pickArgs}"
+        },
+        {
+            "name": "Run: Cleanup Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/cleanup.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run: Load Holding Portfolios",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/portfolio/load_holding_portfolios.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run: Load Missing Prices",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/stock_mdb/load_missing.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}

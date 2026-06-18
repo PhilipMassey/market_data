@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
-from database import get_db_connection, get_database, get_close_price_collection, insert_close_prices
+from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
 
 def get_business_days(start_date: str, end_date: str) -> pd.DatetimeIndex:
     """
@@ -36,9 +36,8 @@ def main():
     """
     Main function to download and store market data.
     """
-    client = get_db_connection()
-    db = get_database(client)
-    collection = get_close_price_collection(db)
+    # 1. Initialize SQLite schema if not exists
+    init_sqlite_db()
 
     # Example usage: Download data for the last 5 business days
     end_date = datetime.now()
@@ -51,7 +50,6 @@ def main():
     else:
         start_date = business_days[0]
 
-
     tickers = ["AAPL", "GOOGL", "MSFT"] # Example tickers
     
     print(f"Downloading data for {tickers} from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
@@ -59,16 +57,19 @@ def main():
     data_to_insert = download_daily_close(tickers, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
     
     if data_to_insert:
-        # To prevent duplicates, you should create a unique index in MongoDB
-        # db.market_data_close.createIndex({ ticker: 1, date: 1 }, { unique: true })
+        rows_to_insert = [(d["date"], d["ticker"], float(d["close_price"])) for d in data_to_insert]
+        
         try:
-            insert_close_prices(collection, data_to_insert)
-            print(f"Successfully inserted {len(data_to_insert)} documents.")
+            with get_sqlite_conn() as conn:
+                cursor = conn.cursor()
+                cursor.executemany("""
+                    INSERT INTO market_data_close (date, ticker, close_price)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(date, ticker) DO UPDATE SET close_price=excluded.close_price
+                """, rows_to_insert)
+            print(f"Successfully inserted/updated {len(rows_to_insert)} records in SQLite.")
         except Exception as e:
             print(f"An error occurred during insertion: {e}")
-            print("Consider creating a unique index to handle duplicates gracefully.")
-
-    client.close()
 
 if __name__ == "__main__":
     main()

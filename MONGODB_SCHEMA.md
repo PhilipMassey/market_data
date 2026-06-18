@@ -7,7 +7,7 @@ Here is an outline of the collections and the scripts responsible for populating
 
 ## Database: `stock_market`
 
-### 1. `FidelityPositions` (`md.db_fidel_pos`)
+### 1. `FidelityPositions` (`md.db_fidelity_positions`)
 *   **Purpose**: Stores historical and current snapshots of your Fidelity investment portfolios. It keeps track of the symbols, quantity, value, and cost basis per account.
 *   **Populated By**: 
     *   **Workflow**: The Weekly Fidelity Pipeline (`/weekly-fidelity-flow`).

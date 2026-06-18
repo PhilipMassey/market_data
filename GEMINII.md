@@ -11,10 +11,10 @@
 
 ## Tech Stack
 - Frontend: Python with Dash (Plotly), Tailwind CSS via components
-- Backend/Data: MongoDB (Local instance), Pandas, NumPy
+- Backend/Data: SQLite, Pandas, NumPy
 
 ## Architecture & Conventions
-- Data Layer: Always isolate MongoDB query logic into a dedicated `database.py` file.
+- Data Layer: Always isolate SQLite query logic into dedicated modules (e.g., `database/sqlite_connection.py` and `database/database_utils.py`).
 - State Management: Use Dash's dcc.Store for client-side state handling; avoid global Python variables.
 - Type Hinting: Use explicit Python type hints (`from typing import ...`) for all new function definitions.
 
@@ -23,7 +23,7 @@
 - **Surgical Edits Only**: Only modify code that is directly relevant to the task. Do not refactor or reformat unrelated code.
 - **No Assumptions**: If a requirement is ambiguous, ask a clarifying question before proceeding. Do not invent requirements.
 - **No Overengineering**: A working 20-line solution beats an elegant 200-line framework.
-- Never hardcode database connection strings; always pull from `os.environ`.
+- Never hardcode database connection paths; always pull from `os.environ.get('SQLITE_DB_PATH')`.
 - Do not use deprecated Dash components (e.g., use `dash.html` instead of `dash_html_components`).
 - Never generate massive, multi-thousand-line single files; break components into a `/components` directory.
 

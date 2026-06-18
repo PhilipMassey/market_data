@@ -1,13 +1,19 @@
-from database.connection import db_manager
+import os
+import sys
+
+# Ensure project root is in path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from stock_mdb.market_data_close import download_and_insert_missing_close_prices
 
 def find_and_load_missing_close_prices():
     """
-    Queries the Yahoo Finance API to fetch the historical close price data
-    for symbols that are missing data on specific trading days.
+    Finds and loads missing close prices in the SQLite database by calling
+    the daily maintenance procedure in market_data_close.py.
     """
-    collection = db_manager.db['market_data_close']
-    # TODO: Implement logic to find missing dates and load from yfinance
-    print("Finding and loading missing close prices...")
+    download_and_insert_missing_close_prices()
 
 if __name__ == "__main__":
     find_and_load_missing_close_prices()

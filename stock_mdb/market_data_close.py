@@ -88,52 +88,50 @@ def download_and_insert_missing_close_prices():
     tickers_with_missing_data = list(missing_data_map.keys())
     print(f"Found missing data for {len(tickers_with_missing_data)} tickers.")
 
-    all_missing_dates = [date for dates in missing_data_map.values() for date in dates]
-    if not all_missing_dates:
-        print("No specific dates are missing. Exiting.")
-        return
-
-    min_fetch_date = min(all_missing_dates)
-    max_fetch_date_obj = datetime.strptime(max(all_missing_dates), '%Y-%m-%d') + timedelta(days=1)
-    max_fetch_date = max_fetch_date_obj.strftime('%Y-%m-%d')
-
-    print(f"Fetching data from yfinance between {min_fetch_date} and {max_fetch_date}...")
-
-    # 5. Download Data
-    try:
-        data = yf.download(tickers_with_missing_data, start=min_fetch_date, end=max_fetch_date, progress=False)
-    except Exception as e:
-        print(f"Error fetching from yfinance: {e}")
-        return
-
-    if data.empty:
-        print("yfinance returned no data.")
-        return
-
-    close_prices = data['Close']
-    
-    if len(tickers_with_missing_data) == 1:
-        close_prices = close_prices.to_frame(name=tickers_with_missing_data[0])
-
-    # 6. Transform and Bulk Upsert in SQLite
     rows_to_insert = []
     
+    # 5. Download Data per ticker to avoid massive redundant range downloads
     for ticker, missing_dates in missing_data_map.items():
-        if ticker not in close_prices.columns:
+        if not missing_dates:
             continue
             
-        ticker_series = close_prices[ticker]
+        ticker_min = min(missing_dates)
+        ticker_max_obj = datetime.strptime(max(missing_dates), '%Y-%m-%d') + timedelta(days=1)
+        ticker_max = ticker_max_obj.strftime('%Y-%m-%d')
         
-        for missing_date in missing_dates:
-            try:
-                date_ts = pd.Timestamp(missing_date)
-                if date_ts in ticker_series.index:
-                    price = ticker_series[date_ts]
-                    import math
-                    if pd.notna(price) and not math.isnan(price):
-                        rows_to_insert.append((missing_date, ticker, float(price)))
-            except KeyError:
-                pass
+        print(f"Fetching data for {ticker} from yfinance between {ticker_min} and {ticker_max}...")
+        
+        try:
+            data = yf.download([ticker], start=ticker_min, end=ticker_max, progress=False)
+            if data.empty:
+                continue
+                
+            close_prices = data['Close']
+            if isinstance(close_prices, pd.Series):
+                close_prices = close_prices.to_frame(name=ticker)
+            elif isinstance(close_prices, pd.DataFrame):
+                if isinstance(close_prices.columns, pd.MultiIndex):
+                    close_prices.columns = close_prices.columns.get_level_values(-1)
+                if ticker not in close_prices.columns and len(close_prices.columns) > 0:
+                    close_prices = close_prices.rename(columns={close_prices.columns[0]: ticker})
+            
+            if ticker not in close_prices.columns:
+                continue
+                
+            ticker_series = close_prices[ticker]
+            
+            for missing_date in missing_dates:
+                try:
+                    date_ts = pd.Timestamp(missing_date)
+                    if date_ts in ticker_series.index:
+                        price = ticker_series[date_ts]
+                        import math
+                        if pd.notna(price) and not math.isnan(price):
+                            rows_to_insert.append((missing_date, ticker, float(price)))
+                except KeyError:
+                    pass
+        except Exception as e:
+            print(f"Error fetching data for {ticker}: {e}")
 
     if rows_to_insert:
         print(f"Preparing to insert/update {len(rows_to_insert)} records in SQLite...")
@@ -151,6 +149,3 @@ def download_and_insert_missing_close_prices():
     else:
          print("No valid price data found to insert for the missing dates.")
 
-
-if __name__ == "__main__":
-    download_and_insert_missing_close_prices()

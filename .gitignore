@@ -2,6 +2,12 @@
 .idea/
 .venv/
 __pycache__/
+.DS_Store
+**/.DS_Store
 
 # Exclude ticker CSV files
 tickers/**/*.csv
+
+# Database files
+*.db
+

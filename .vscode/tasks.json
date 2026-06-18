@@ -1,0 +1,44 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🐍 Daily Load Missing Prices",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/stock_mdb/load_missing.py"
+            ],
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "🐍 Weekly Load Holding Portfolios",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/portfolio/load_holding_portfolios.py"
+            ],
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "📊 Run Portfolio Valuation Dashboard",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/portfolio/portfolio_dashboard.py"
+            ],
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
+    ]
+}

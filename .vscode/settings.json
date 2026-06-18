@@ -4,5 +4,8 @@
         "tests"
     ],
     "python.defaultInterpreterPath": ".venv/bin/python",
-    "python.pyrefly.typeCheckingMode": "off"
+    "python.pyrefly.typeCheckingMode": "off",
+    "files.exclude": {
+        "**/.csv": true
+    }
 }

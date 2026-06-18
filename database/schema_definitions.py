@@ -17,7 +17,7 @@ TEST_VOLUME_COLLECTION = "test_volume"
 # These variables provide direct access to the collection objects.
 # Example usage: db_close.find_one({"ticker": "AAPL"})
 
-db_fidel_pos = db_manager.db[FIDELITY_POSITIONS_COLLECTION]
+db_fidelity_positions = db_manager.db[FIDELITY_POSITIONS_COLLECTION]
 db_close = db_manager.db[MARKET_DATA_CLOSE_COLLECTION]
 db_volume = db_manager.db[MARKET_DATA_VOLUME_COLLECTION]
 db_symbol_profile = db_manager.db[SYMBOL_PROFILE_COLLECTION]

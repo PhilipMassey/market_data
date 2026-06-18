@@ -10,7 +10,7 @@ from database.schema_definitions import (
     SYMBOL_PROFILE_COLLECTION,
     SYMBOL_PROFILE_CACHE_COLLECTION,
     SYMBOL_INFO_COLLECTION,
-    db_fidel_pos,
+    db_fidelity_positions,
     db_close,
     db_volume,
     db_symbol_profile,
@@ -50,7 +50,7 @@ def test_collection_handles_are_valid(mock_db_manager):
     """
     # A list of tuples, where each tuple is (handle, expected_name_constant)
     handles_to_test = [
-        (db_fidel_pos, FIDELITY_POSITIONS_COLLECTION),
+        (db_fidelity_positions, FIDELITY_POSITIONS_COLLECTION),
         (db_close, MARKET_DATA_CLOSE_COLLECTION),
         (db_volume, MARKET_DATA_VOLUME_COLLECTION),
         (db_symbol_profile, SYMBOL_PROFILE_COLLECTION),

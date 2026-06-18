@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Valuation Dashboard</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Flatpickr Datepicker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar or top navigation -->
+        <header class="app-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-chart-line logo-icon"></i>
+                <div>
+                    <h1>Antigravity Markets</h1>
+                    <p class="subtitle">Fidelity Portfolio Valuation</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="date-badge" id="header-date-badge">
+                    <span class="badge-label">Snapshot Date:</span>
+                    <span id="snapshot-date" class="badge-value">Loading...</span>
+                </div>
+                <button id="btn-refresh" class="btn btn-primary">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Body -->
+        <main class="dashboard-main">
+            <!-- Loading Indicator -->
+            <div id="loading-overlay" class="loading-overlay">
+                <div class="spinner"></div>
+                <p>Processing portfolio data...</p>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="error-banner" class="error-banner hidden">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span id="error-message">An error occurred while loading data.</span>
+            </div>
+
+            <!-- Tab Navigation Bar -->
+            <div class="tabs-nav">
+                <button id="tab-btn-valuation" class="tab-btn active">
+                    <i class="fa-solid fa-wallet"></i> Holdings Valuation
+                </button>
+                <button id="tab-btn-comparison" class="tab-btn">
+                    <i class="fa-solid fa-scale-balanced"></i> Performance Comparison
+                </button>
+            </div>
+
+            <!-- ================= VIEW 1: HOLDINGS VALUATION ================= -->
+            <div id="view-valuation" class="tab-view">
+                <!-- Dashboard Summary Cards -->
+                <section class="summary-cards">
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon blue">
+                                <i class="fa-solid fa-wallet"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">Total Portfolio Value</span>
+                                <h2 id="total-val" class="metric-value">$0.00</h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon purple">
+                                <i class="fa-solid fa-receipt"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">Total Cost Basis</span>
+                                <h2 id="total-cost" class="metric-value">$0.00</h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon green" id="total-gain-icon-container">
+                                <i id="total-gain-icon" class="fa-solid fa-arrow-trend-up"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">Total Gain / Loss</span>
+                                <h2 id="total-gain" class="metric-value">$0.00</h2>
+                                <span id="total-gain-percent" class="metric-subtext green-text">+0.00%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon orange">
+                                <i class="fa-solid fa-vault"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">Cash Sweep vs. Equities</span>
+                                <h2 id="total-cash" class="metric-value">$0.00</h2>
+                                <span id="cash-percentage" class="metric-subtext text-muted">0.0% Cash</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Middle Section: Chart & Stats -->
+                <section class="charts-section">
+                    <!-- Doughnut Chart Card -->
+                    <div class="card card-glass chart-card">
+                        <div class="card-header">
+                            <h3>Portfolio Asset Allocation</h3>
+                            <p class="section-description">Distribution of holdings by weight %</p>
+                        </div>
+                        <div class="card-body chart-body">
+                            <div class="chart-container">
+                                <canvas id="allocation-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top Holdings & Asset Allocation Cards -->
+                    <div class="card card-glass stats-card">
+                        <div class="card-header">
+                            <h3>Key Portfolio Statistics</h3>
+                        </div>
+                        <div class="card-body stats-body">
+                            <div class="stat-row">
+                                <span class="stat-label">Total Positions</span>
+                                <span id="stat-total-positions" class="stat-value">0</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Equity Allocation</span>
+                                <span id="stat-equity-alloc" class="stat-value">$0.00 (0%)</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Cash Allocation</span>
+                                <span id="stat-cash-alloc" class="stat-value">$0.00 (0%)</span>
+                            </div>
+                            <hr class="stat-divider">
+                            <h4>Top 5 Holdings</h4>
+                            <div id="top-holdings-list" class="top-holdings-list">
+                                <!-- Injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Bottom Section: Detailed Table -->
+                <section class="table-section">
+                    <div class="card card-glass">
+                        <div class="table-toolbar">
+                            <div class="toolbar-left">
+                                <h3>Detailed Holdings</h3>
+                                <span id="filtered-count" class="text-muted">(0 positions)</span>
+                            </div>
+                            <div class="toolbar-right">
+                                <div class="search-box">
+                                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                                    <input type="text" id="search-input" placeholder="Search by ticker or account...">
+                                </div>
+                                <div class="page-size-selector">
+                                    <label for="page-size-select">Show:</label>
+                                    <select id="page-size-select">
+                                        <option value="10">10</option>
+                                        <option value="15" selected>15</option>
+                                        <option value="25">25</option>
+                                        <option value="50">50</option>
+                                        <option value="all">All</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table id="holdings-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="symbol" class="sortable">Ticker <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="account_name" class="sortable">Account <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="quantity" class="sortable text-right">Quantity <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="average_cost_basis" class="sortable text-right">Avg Cost <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="cost_basis_total" class="sortable text-right">Cost Basis <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="current_price" class="sortable text-right">Last Price <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="dynamic_value" class="sortable text-right">Current Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="gain_loss_dollar" class="sortable text-right">Gain / Loss <i class="fa-solid fa-sort"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="holdings-table-body">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Controls -->
+                        <div class="table-pagination">
+                            <div class="pagination-info">
+                                Showing <span id="pag-start">0</span> to <span id="pag-end">0</span> of <span id="pag-total">0</span> entries
+                            </div>
+                            <div class="pagination-buttons" id="pagination-nav">
+                                <!-- Injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ================= VIEW 2: PERFORMANCE COMPARISON ================= -->
+            <div id="view-comparison" class="tab-view hidden">
+                <!-- Date Selector Bar -->
+                <section class="comparison-selectors card card-glass">
+                    <div class="selector-container">
+                        <div class="selector-field date-range-field">
+                            <label for="compare-date-range"><i class="fa-solid fa-calendar-days"></i> Date Range:</label>
+                            <input type="text" id="compare-date-range" class="date-picker-input" placeholder="Select Date Range">
+                        </div>
+                        <button id="btn-compare" class="btn btn-primary">
+                            <i class="fa-solid fa-magnifying-glass-chart"></i> Compare
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Comparison Summary Cards -->
+                <section class="summary-cards">
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon blue">
+                                <i class="fa-solid fa-calendar-days"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">Start Value</span>
+                                <h2 id="comp-start-val" class="metric-value">$0.00</h2>
+                                <span id="comp-start-date-label" class="metric-subtext text-muted">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon purple">
+                                <i class="fa-solid fa-calendar-check"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">End Value</span>
+                                <h2 id="comp-end-val" class="metric-value">$0.00</h2>
+                                <span id="comp-end-date-label" class="metric-subtext text-muted">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-glass">
+                        <div class="card-body">
+                            <div class="card-icon green" id="comp-gain-icon-container">
+                                <i id="comp-gain-icon" class="fa-solid fa-arrow-trend-up"></i>
+                            </div>
+                            <div class="card-metrics">
+                                <span class="card-title">Absolute Change</span>
+                                <h2 id="comp-gain" class="metric-value">$0.00</h2>
+                                <span id="comp-gain-percent" class="metric-subtext green-text">+0.00%</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Comparison Detailed Table -->
+                <section class="table-section">
+                    <div class="card card-glass">
+                        <div class="table-toolbar">
+                            <div class="toolbar-left">
+                                <h3>Holdings Valuation Delta</h3>
+                                <span id="comp-filtered-count" class="text-muted">(0 positions)</span>
+                            </div>
+                            <div class="toolbar-right">
+                                <div class="search-box">
+                                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                                    <input type="text" id="compare-search-input" placeholder="Search by ticker or account...">
+                                </div>
+                                <div class="page-size-selector">
+                                    <label for="compare-page-size-select">Show:</label>
+                                    <select id="compare-page-size-select">
+                                        <option value="10">10</option>
+                                        <option value="15" selected>15</option>
+                                        <option value="25">25</option>
+                                        <option value="50">50</option>
+                                        <option value="all">All</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table id="comparison-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="symbol" class="sortable">Ticker <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="account_name" class="sortable">Account <i class="fa-solid fa-sort"></i></th>
+                                        <th class="text-right">Quantity</th>
+                                        <th data-sort="start_value" class="sortable text-right">Start Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="end_value" class="sortable text-right">End Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="change_dollar" class="sortable text-right">Gain / Loss <i class="fa-solid fa-sort"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comparison-table-body">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Controls -->
+                        <div class="table-pagination">
+                            <div class="pagination-info">
+                                Showing <span id="comp-pag-start">0</span> to <span id="comp-pag-end">0</span> of <span id="comp-pag-total">0</span> entries
+                            </div>
+                            <div class="pagination-buttons" id="comparison-pagination-nav">
+                                <!-- Injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>&copy; 2026 Antigravity Markets. Built for Philip Massey.</p>
+        </footer>
+    </div>
+
+    <!-- Frontend logic scripts -->
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
