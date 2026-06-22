@@ -72,3 +72,12 @@ def init_sqlite_db():
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_fidelity_positions_date ON fidelity_positions (date)
         """)
+        # Create ticker_meta_profile table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ticker_meta_profile (
+                ticker TEXT PRIMARY KEY NOT NULL,
+                sector TEXT,
+                industry TEXT
+            )
+        """)
+
