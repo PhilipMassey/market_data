@@ -295,5 +295,35 @@ def test_api_compare_quantity_change():
         assert aapl['symbol'] == 'AAPL'
         assert aapl['start_qty'] == 10.0
         assert aapl['end_qty'] == 12.0
+        assert aapl['qty_change'] == 2.0
         assert aapl['change_dollar'] == 120.0 # (150.0 - 140.0) * 12.0
         assert aapl['change_percent'] == pytest.approx(7.1428, abs=1e-3)
+
+def test_api_compare_hybrid_date_resolution(mock_sqlite_db):
+    # Test that requesting arbitrary weekday dates resolves quantities to the preceding Sunday
+    # but still fetches the price as of the requested date.
+    # mock_sqlite_db contains:
+    # - Snapshot 2026-06-01: AAPL (10.0 shares @ 140.0 close_price on 2026-06-01)
+    # - Snapshot 2026-06-07: AAPL (10.0 shares @ 144.0 close_price on 2026-06-06)
+    #
+    # If we request a comparison between Tuesday 2026-06-02 and Monday 2026-06-08:
+    # - 2026-06-02 resolves to quantities on 2026-06-01 (AAPL: qty 10.0)
+    #   Price on 2026-06-02 falls back to 140.0 (as of 2026-06-01)
+    # - 2026-06-08 resolves to quantities on 2026-06-07 (AAPL: qty 10.0)
+    #   Price on 2026-06-08 is 150.0 (market_data_close has price 150.0 on 2026-06-08)
+    client = app.test_client()
+    response = client.get('/api/compare?start_date=2026-06-02&end_date=2026-06-08')
+    assert response.status_code == 200
+    data = response.json
+    
+    assert data['start_date'] == '2026-06-02'
+    assert data['end_date'] == '2026-06-08'
+    
+    totals = data['totals']
+    # Start: AAPL (10 * 140 = 1400) + MM (1000) = 2400.0
+    # End: AAPL (10 * 150 = 1500) + MM (1800) = 3300.0
+    # change_dollar = 3300 - 2400 = 900.0
+    assert totals['start_value'] == 2400.0
+    assert totals['end_value'] == 3300.0
+    assert totals['change_dollar'] == 900.0
+

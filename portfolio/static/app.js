@@ -27,7 +27,8 @@ const state = {
     businessDays: [],
     snapshotDates: [],
     allocationChart: null,
-    flatpickrInstance: null
+    flatpickrStartInstance: null,
+    flatpickrEndInstance: null
 };
 
 // Utilities & Formatters
@@ -135,32 +136,33 @@ async function loadSnapshotDates() {
 
 // Init Flatpickr Date Picker
 function initDatePicker() {
-    const config = {
-        mode: 'range',
+    const commonConfig = {
+        mode: 'single',
         dateFormat: 'Y-m-d',
         theme: 'dark',
-        maxDate: 'today',
-        onClose: function(selectedDates, dateStr, instance) {
-            // Callback can be handled on Compare button click
-        }
+        maxDate: 'today'
     };
     
-    // If we have snapshot dates from DB, restrict picker dates to them
+    const startConfig = { ...commonConfig };
+    const endConfig = { ...commonConfig };
+    
+    // If we have snapshot dates from DB, set defaults
     if (state.snapshotDates && state.snapshotDates.length > 0) {
-        config.enable = state.snapshotDates;
-        
         // Default range (latest two snapshots)
         const defaultEnd = state.snapshotDates[0];
         const defaultStart = state.snapshotDates[1] || state.snapshotDates[0];
-        config.defaultDate = [defaultStart, defaultEnd];
         
-        const el = document.getElementById('compare-date-range');
-        if (el) {
-            el.value = `${defaultStart} to ${defaultEnd}`;
-        }
+        startConfig.defaultDate = defaultStart;
+        endConfig.defaultDate = defaultEnd;
+        
+        const startEl = document.getElementById('compare-start-date');
+        const endEl = document.getElementById('compare-end-date');
+        if (startEl) startEl.value = defaultStart;
+        if (endEl) endEl.value = defaultEnd;
     }
     
-    state.flatpickrInstance = flatpickr('#compare-date-range', config);
+    state.flatpickrStartInstance = flatpickr('#compare-start-date', startConfig);
+    state.flatpickrEndInstance = flatpickr('#compare-end-date', endConfig);
 }
 
 // Fetch and load Valuation Data
@@ -550,21 +552,19 @@ function renderPaginationControls(viewType) {
 
 // Fetch and load Comparison Data
 async function loadComparisonData() {
-    const rangeInput = document.getElementById('compare-date-range');
-    if (!rangeInput || !rangeInput.value) {
-        showError('Please select a date range first.');
+    const startInput = document.getElementById('compare-start-date');
+    const endInput = document.getElementById('compare-end-date');
+    if (!startInput || !startInput.value || !endInput || !endInput.value) {
+        showError('Please select both start and end dates first.');
         return;
     }
     
-    const dates = rangeInput.value.split(' to ');
-    if (dates.length !== 2) {
-        showError('Please select a complete range containing a start and end date.');
-        return;
-    }
+    const startDate = startInput.value;
+    const endDate = endInput.value;
     
     showLoading(true);
     try {
-        const url = `/api/compare?start_date=${dates[0]}&end_date=${dates[1]}`;
+        const url = `/api/compare?start_date=${startDate}&end_date=${endDate}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch comparison data');
         const data = await res.json();
@@ -691,7 +691,7 @@ function filterAndRenderComparisonTable() {
     tbody.innerHTML = '';
     
     if (paginatedList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">No matching positions found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">No matching positions found.</td></tr>';
         renderPaginationControls('comparison');
         return;
     }
@@ -701,25 +701,30 @@ function filterAndRenderComparisonTable() {
         const changeClass = pos.change_dollar >= 0 ? 'green-text' : 'red-text';
         const isCashPos = pos.symbol === 'Money Market' || (pos.symbol && pos.symbol.endsWith('**'));
         
+        let qtyChangeStr = '-';
+        let qtyChangeClass = 'text-muted';
+        if (pos.qty_change !== null && pos.qty_change !== undefined) {
+            const qtyDiff = pos.qty_change;
+            if (qtyDiff > 0) {
+                qtyChangeStr = `+${formatQuantity(qtyDiff)}`;
+                qtyChangeClass = 'green-text text-bold';
+            } else if (qtyDiff < 0) {
+                qtyChangeStr = formatQuantity(qtyDiff);
+                qtyChangeClass = 'red-text text-bold';
+            } else {
+                qtyChangeStr = '0';
+                qtyChangeClass = '';
+            }
+        }
+        
         tr.innerHTML = `
             <td class="text-bold">${pos.symbol}</td>
             <td><span class="text-muted">${pos.account_name || '-'}</span></td>
-            <td class="text-right">
-                <div style="font-size: 0.75rem; color: var(--text-muted);">
-                    Start: ${formatQuantity(pos.start_qty)}<br>
-                    End: ${formatQuantity(pos.end_qty)}
-                </div>
-            </td>
+            <td class="text-right ${qtyChangeClass}">${qtyChangeStr}</td>
             <td class="text-right">${formatCurrency(pos.start_value)}</td>
             <td class="text-right">${formatCurrency(pos.end_value)}</td>
-            <td class="text-right ${changeClass} text-bold">
-                ${isCashPos ? '-' : `
-                <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                    <span>${formatCurrency(pos.change_dollar)}</span>
-                    <span style="font-size: 0.75rem;">${formatPercent(pos.change_percent)}</span>
-                </div>
-                `}
-            </td>
+            <td class="text-right ${changeClass} text-bold">${isCashPos ? '-' : formatCurrency(pos.change_dollar)}</td>
+            <td class="text-right ${changeClass} text-bold">${isCashPos ? '-' : formatPercent(pos.change_percent)}</td>
         `;
         tbody.appendChild(tr);
     });

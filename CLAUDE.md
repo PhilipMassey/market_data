@@ -120,6 +120,8 @@ These are the exact failure modes this file exists to prevent.
 ### Virtual Environment & Python Execution
 - Always use the local virtualenv Python interpreter: `.venv/bin/python`
 - To run daily database close maintenance: `.venv/bin/python stock_mdb/market_data_close.py`
+- To run missing prices loading script: `./run_load_missing.sh`
+- To run the Portfolio Dashboard: `./run_dashboard.sh`
 
 ### Test Commands
 - To run the full test suite: `.venv/bin/pytest`

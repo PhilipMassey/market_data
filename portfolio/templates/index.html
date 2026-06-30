@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1.0.5">
 </head>
 <body>
     <div class="app-container">
@@ -226,9 +226,13 @@
                 <!-- Date Selector Bar -->
                 <section class="comparison-selectors card card-glass">
                     <div class="selector-container">
-                        <div class="selector-field date-range-field">
-                            <label for="compare-date-range"><i class="fa-solid fa-calendar-days"></i> Date Range:</label>
-                            <input type="text" id="compare-date-range" class="date-picker-input" placeholder="Select Date Range">
+                        <div class="selector-field">
+                            <label for="compare-start-date"><i class="fa-solid fa-calendar-days"></i> Start Date:</label>
+                            <input type="text" id="compare-start-date" class="date-picker-input" placeholder="Select Start Date">
+                        </div>
+                        <div class="selector-field">
+                            <label for="compare-end-date"><i class="fa-solid fa-calendar-days"></i> End Date:</label>
+                            <input type="text" id="compare-end-date" class="date-picker-input" placeholder="Select End Date">
                         </div>
                         <button id="btn-compare" class="btn btn-primary">
                             <i class="fa-solid fa-magnifying-glass-chart"></i> Compare
@@ -310,10 +314,11 @@
                                     <tr>
                                         <th data-sort="symbol" class="sortable">Ticker <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="account_name" class="sortable">Account <i class="fa-solid fa-sort"></i></th>
-                                        <th class="text-right">Quantity</th>
+                                        <th data-sort="qty_change" class="sortable text-right">Qty Change <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="start_value" class="sortable text-right">Start Value <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="end_value" class="sortable text-right">End Value <i class="fa-solid fa-sort"></i></th>
-                                        <th data-sort="change_dollar" class="sortable text-right">Gain / Loss <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="change_dollar" class="sortable text-right">Gain / Loss ($) <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="change_percent" class="sortable text-right">Gain / Loss (%) <i class="fa-solid fa-sort"></i></th>
                                     </tr>
                                 </thead>
                                 <tbody id="comparison-table-body">
@@ -342,6 +347,6 @@
     </div>
 
     <!-- Frontend logic scripts -->
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js') }}?v=1.0.5"></script>
 </body>
 </html>

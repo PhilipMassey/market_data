@@ -109,6 +109,7 @@ body {
     letter-spacing: -0.025em;
     background: linear-gradient(135deg, #fff 30%, var(--text-secondary));
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -623,11 +624,11 @@ table {
     width: 100%;
     border-collapse: collapse;
     text-align: left;
-    font-size: 0.875rem;
+    font-size: 0.825rem;
 }
 
 th, td {
-    padding: 1rem 1.5rem;
+    padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--border-glass);
 }
 

@@ -46,9 +46,31 @@ def get_price_at_date(symbol: str, date_str: str) -> float:
             return float(row[0])
     return None
 
+def get_latest_snapshot_date_on_or_before(date_str: str) -> str:
+    with get_sqlite_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT MAX(date) 
+            FROM fidelity_positions 
+            WHERE date <= ?
+        """, (date_str,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            return row[0]
+            
+        # Fallback to the earliest snapshot date if none exists on or before
+        cursor.execute("SELECT MIN(date) FROM fidelity_positions")
+        row = cursor.fetchone()
+        if row and row[0]:
+            return row[0]
+            
+    return date_str
+
 def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = False) -> dict:
     portfolio = {}
     cash_positions = []
+    
+    snapshot_date = get_latest_snapshot_date_on_or_before(date_str)
     
     with get_sqlite_conn() as conn:
         cursor = conn.cursor()
@@ -56,7 +78,7 @@ def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = Fals
             SELECT symbol, quantity, average_cost_basis, cost_basis_total, current_value, account_name, last_price, percent_of_account
             FROM fidelity_positions
             WHERE date = ?
-        """, (date_str,))
+        """, (snapshot_date,))
         rows = cursor.fetchall()
         
     for row in rows:
@@ -247,11 +269,16 @@ def api_compare():
             c_dollar = (e_price - s_price) * e_qty
             c_percent = ((e_price - s_price) / s_price * 100) if s_price > 0.0 else 0.0
             
+        s_qty = start_pos['quantity']
+        e_qty = end_pos['quantity']
+        qty_change = (e_qty - s_qty) if (s_qty is not None and e_qty is not None) else None
+        
         compare_positions.append({
             'symbol': symbol,
             'account_name': end_pos['account_name'] or start_pos['account_name'],
-            'start_qty': start_pos['quantity'],
-            'end_qty': end_pos['quantity'],
+            'start_qty': s_qty,
+            'end_qty': e_qty,
+            'qty_change': qty_change,
             'start_value': s_val,
             'end_value': e_val,
             'change_dollar': c_dollar,
@@ -267,5 +294,6 @@ def api_compare():
 
 if __name__ == '__main__':
     init_sqlite_db()
+    # Force auto-reload to refresh all HTML templates and static assets (v1.0.5)
     port = int(os.environ.get('PORT', 5001))
     app.run(host='127.0.0.1', port=port, debug=True)
