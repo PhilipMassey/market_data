@@ -4,10 +4,15 @@
         {
             "label": "🐍 Daily Load Missing Prices",
             "type": "shell",
-            "command": "python",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
                 "${workspaceFolder}/stock_mdb/load_missing.py"
             ],
+            "options": {
+                "env": {
+                    "PYTHONPATH": "${workspaceFolder}"
+                }
+            },
             "group": "none",
             "presentation": {
                 "reveal": "always",
@@ -17,10 +22,15 @@
         {
             "label": "🐍 Weekly Load Holding Portfolios",
             "type": "shell",
-            "command": "python",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
                 "${workspaceFolder}/portfolio/load_holding_portfolios.py"
             ],
+            "options": {
+                "env": {
+                    "PYTHONPATH": "${workspaceFolder}"
+                }
+            },
             "group": "none",
             "presentation": {
                 "reveal": "always",
@@ -30,10 +40,15 @@
         {
             "label": "📊 Run Portfolio Valuation Dashboard",
             "type": "shell",
-            "command": "python",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
                 "${workspaceFolder}/portfolio/portfolio_dashboard.py"
             ],
+            "options": {
+                "env": {
+                    "PYTHONPATH": "${workspaceFolder}"
+                }
+            },
             "group": "none",
             "presentation": {
                 "reveal": "always",

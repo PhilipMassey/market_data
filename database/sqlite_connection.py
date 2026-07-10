@@ -2,15 +2,10 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-# Fallback to local workspace database if it exists
-_dir = os.path.dirname(os.path.abspath(__file__))
-_local_db = os.path.join(_dir, 'market_data.db')
+# Fallback to external database outside project directory
 SQLITE_DB_PATH = os.environ.get('SQLITE_DB_PATH')
 if not SQLITE_DB_PATH:
-    if os.path.exists(_local_db):
-        SQLITE_DB_PATH = _local_db
-    else:
-        SQLITE_DB_PATH = '/Users/philipmassey/projects/.data/market_data.db'
+    SQLITE_DB_PATH = '/Users/philipmassey/projects/.data/market_data.db'
 
 @contextmanager
 def get_sqlite_conn():
@@ -73,9 +68,18 @@ def init_sqlite_db():
             CREATE INDEX IF NOT EXISTS idx_fidelity_positions_date ON fidelity_positions (date)
         """)
         # Create ticker_meta_profile table
+        # Check current columns to migrate/replace if outdated
+        cursor.execute("PRAGMA table_info(ticker_meta_profile)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if columns and "company_name" not in columns:
+            print("Detected outdated ticker_meta_profile schema. Migrating...")
+            cursor.execute("DROP TABLE ticker_meta_profile")
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS ticker_meta_profile (
                 ticker TEXT PRIMARY KEY NOT NULL,
+                company_name TEXT,
+                type TEXT,
                 sector TEXT,
                 industry TEXT
             )

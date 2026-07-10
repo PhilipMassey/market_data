@@ -5,7 +5,21 @@
     ],
     "python.defaultInterpreterPath": ".venv/bin/python",
     "python.pyrefly.typeCheckingMode": "off",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}"
+    },
     "files.exclude": {
-        "**/.csv": true
+        ".gitignore": true,
+        ".venv": true,
+        ".pytest_cache": true,
+        "__pycache__": true,
+        ".idea": true,
+        "**/.agents": true,
+        "**/.DS_Store": true,
+        "**/.gitkeep": true,
+        "tickers/**/*.csv": false
     }
 }

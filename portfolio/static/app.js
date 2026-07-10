@@ -28,7 +28,27 @@ const state = {
     snapshotDates: [],
     allocationChart: null,
     flatpickrStartInstance: null,
-    flatpickrEndInstance: null
+    flatpickrEndInstance: null,
+    // Rankings View State
+    ranks: {
+        rawTickers: [],
+        filteredTickers: [],
+        sectorsIndustries: {},
+        dirsPortfolios: {},
+        optionsLoaded: false,
+        dataLoaded: false,
+        period: '1 Month',
+        directory: '',
+        portfolio: '',
+        sector: '',
+        industry: '',
+        rankFilter: 100,
+        pageSize: 15,
+        currentPage: 1,
+        sortBy: 'risk_reward_rank',
+        sortDir: 'asc',
+        searchQuery: ''
+    }
 };
 
 // Utilities & Formatters
@@ -82,25 +102,48 @@ function showError(message) {
 function initTabs() {
     const valTabBtn = document.getElementById('tab-btn-valuation');
     const compTabBtn = document.getElementById('tab-btn-comparison');
+    const ranksTabBtn = document.getElementById('tab-btn-ranks');
     const valView = document.getElementById('view-valuation');
     const compView = document.getElementById('view-comparison');
+    const ranksView = document.getElementById('view-ranks');
 
     valTabBtn.addEventListener('click', () => {
         valTabBtn.classList.add('active');
         compTabBtn.classList.remove('active');
+        ranksTabBtn.classList.remove('active');
         valView.classList.remove('hidden');
         compView.classList.add('hidden');
+        ranksView.classList.add('hidden');
     });
 
     compTabBtn.addEventListener('click', () => {
         compTabBtn.classList.add('active');
         valTabBtn.classList.remove('active');
+        ranksTabBtn.classList.remove('active');
         compView.classList.remove('hidden');
         valView.classList.add('hidden');
+        ranksView.classList.add('hidden');
         
         // Lazy load snapshot dates if not loaded
         if (!state.snapshotDates || state.snapshotDates.length === 0) {
             loadSnapshotDates();
+        }
+    });
+
+    ranksTabBtn.addEventListener('click', () => {
+        ranksTabBtn.classList.add('active');
+        valTabBtn.classList.remove('active');
+        compTabBtn.classList.remove('active');
+        ranksView.classList.remove('hidden');
+        valView.classList.add('hidden');
+        compView.classList.add('hidden');
+        
+        // Lazy load rankings & options if not loaded
+        if (!state.ranks.optionsLoaded) {
+            loadRanksOptions();
+        }
+        if (!state.ranks.dataLoaded) {
+            loadRanksData();
         }
     });
 }
@@ -108,7 +151,7 @@ function initTabs() {
 // Load NYSE Business Days
 async function loadBusinessDays() {
     try {
-        const res = await fetch('/api/business-days');
+        const res = await fetch('/data/business-days');
         if (!res.ok) throw new Error('Failed to load business days');
         state.businessDays = await res.json();
     } catch (err) {
@@ -119,7 +162,7 @@ async function loadBusinessDays() {
 // Load Snapshot Dates from DB
 async function loadSnapshotDates() {
     try {
-        const res = await fetch('/api/snapshot-dates');
+        const res = await fetch('/data/snapshot-dates');
         if (!res.ok) throw new Error('Failed to load snapshot dates');
         state.snapshotDates = await res.json();
         initDatePicker();
@@ -169,7 +212,7 @@ function initDatePicker() {
 async function loadValuationData() {
     showLoading(true);
     try {
-        const res = await fetch('/api/portfolio');
+        const res = await fetch('/data/portfolio');
         if (!res.ok) throw new Error('Failed to fetch valuation data');
         const data = await res.json();
         
@@ -446,7 +489,7 @@ function filterAndRenderValuationTable() {
     tbody.innerHTML = '';
     
     if (paginatedList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 2rem;">No matching positions found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">No matching positions found.</td></tr>';
         renderPaginationControls('valuation');
         return;
     }
@@ -456,32 +499,15 @@ function filterAndRenderValuationTable() {
         
         const changeClass = pos.gain_loss_dollar >= 0 ? 'green-text' : 'red-text';
         const isCashPos = pos.symbol === 'Money Market' || (pos.symbol && pos.symbol.endsWith('**'));
-        
-        const sourceBadge = pos.price_source === 'db_close' 
-            ? '<span class="badge-source badge-db">DB Close</span>'
-            : '<span class="badge-source badge-fid">Fidelity</span>';
             
         tr.innerHTML = `
             <td class="text-bold">${pos.symbol}</td>
             <td><span class="text-muted">${pos.account_name || '-'}</span></td>
             <td class="text-right">${formatQuantity(pos.quantity)}</td>
-            <td class="text-right">${formatCurrency(pos.average_cost_basis)}</td>
             <td class="text-right">${formatCurrency(pos.cost_basis_total)}</td>
-            <td class="text-right">
-                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem;">
-                    <span>${formatCurrency(pos.current_price)}</span>
-                    ${sourceBadge}
-                </div>
-            </td>
             <td class="text-right text-bold">${formatCurrency(pos.dynamic_value)}</td>
-            <td class="text-right ${changeClass} text-bold">
-                ${isCashPos ? '-' : `
-                <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                    <span>${formatCurrency(pos.gain_loss_dollar)}</span>
-                    <span style="font-size: 0.75rem;">${formatPercent(pos.gain_loss_percent)}</span>
-                </div>
-                `}
-            </td>
+            <td class="text-right ${changeClass} text-bold">${isCashPos ? '-' : formatCurrency(pos.gain_loss_dollar)}</td>
+            <td class="text-right ${changeClass} text-bold">${isCashPos ? '-' : formatPercent(pos.gain_loss_percent)}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -564,7 +590,7 @@ async function loadComparisonData() {
     
     showLoading(true);
     try {
-        const url = `/api/compare?start_date=${startDate}&end_date=${endDate}`;
+        const url = `/data/compare?start_date=${startDate}&end_date=${endDate}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch comparison data');
         const data = await res.json();
@@ -777,6 +803,30 @@ function initSortHeaders() {
             filterAndRenderComparisonTable();
         });
     });
+
+    // Ranks table headers
+    document.querySelectorAll('#ranks-table th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const field = th.dataset.sort;
+            const isRankField = field.endsWith('_rank');
+            if (state.ranks.sortBy === field) {
+                state.ranks.sortDir = state.ranks.sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.ranks.sortBy = field;
+                // Ranks are usually sorted asc (1, 2, 3...) whereas percentages are sorted desc (high to low)
+                state.ranks.sortDir = isRankField ? 'asc' : 'desc';
+            }
+            
+            // Update icons
+            document.querySelectorAll('#ranks-table th.sortable i').forEach(i => {
+                i.className = 'fa-solid fa-sort';
+            });
+            const icon = th.querySelector('i');
+            icon.className = state.ranks.sortDir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down';
+            
+            filterAndRenderRanksTable();
+        });
+    });
 }
 
 // Bind search and size controls
@@ -822,6 +872,362 @@ function initToolbarControls() {
     document.getElementById('btn-compare').addEventListener('click', () => {
         loadComparisonData();
     });
+
+    // Ranks Search Input
+    const searchRanks = document.getElementById('ranks-search-input');
+    searchRanks.addEventListener('input', (e) => {
+        state.ranks.searchQuery = e.target.value;
+        state.ranks.currentPage = 1;
+        filterAndRenderRanksTable();
+    });
+
+    // Ranks Period select
+    const periodRanks = document.getElementById('rank-period-select');
+    periodRanks.addEventListener('change', (e) => {
+        state.ranks.period = e.target.value;
+        state.ranks.currentPage = 1;
+        loadRanksData();
+    });
+
+    // Ranks Portfolio select
+    const portRanks = document.getElementById('rank-port-select');
+    portRanks.addEventListener('change', (e) => {
+        state.ranks.portfolio = e.target.value;
+        state.ranks.currentPage = 1;
+        loadRanksData();
+    });
+
+    // Ranks Industry select
+    const indRanks = document.getElementById('rank-industry-select');
+    indRanks.addEventListener('change', (e) => {
+        state.ranks.industry = e.target.value;
+        state.ranks.currentPage = 1;
+        loadRanksData();
+    });
+
+    // Ranks Slider Threshold Input
+    const sliderRanks = document.getElementById('rank-slider-input');
+    const sliderVal = document.getElementById('rank-slider-val');
+    sliderRanks.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        sliderVal.textContent = val === 100 ? 'All' : `Top ${val}`;
+        state.ranks.rankFilter = val;
+        state.ranks.currentPage = 1;
+        loadRanksData();
+    });
+
+    // Detail Panel close button click
+    const btnCloseDetail = document.getElementById('btn-close-detail');
+    btnCloseDetail.addEventListener('click', () => {
+        document.getElementById('ranks-detail-panel').classList.add('hidden');
+    });
+}
+
+// Load Rankings Options (folders, portfolios, sectors, industries)
+async function loadRanksOptions() {
+    try {
+        const res = await fetch('/data/ticker-ranks/options');
+        if (!res.ok) throw new Error('Failed to load ranking options');
+        const data = await res.json();
+        
+        state.ranks.sectorsIndustries = data.sectors_industries;
+        state.ranks.dirsPortfolios = data.dirs_portfolios;
+        state.ranks.optionsLoaded = true;
+        
+        populateRanksFilters();
+    } catch (err) {
+        showError('Error loading ranking options: ' + err.message);
+    }
+}
+
+// Populate Rankings Filter Dropdowns
+function populateRanksFilters() {
+    const dirSelect = document.getElementById('rank-dir-select');
+    const sectorSelect = document.getElementById('rank-sector-select');
+    
+    // Clear and populate Folders
+    dirSelect.innerHTML = '<option value="">-- All Folders --</option>';
+    Object.keys(state.ranks.dirsPortfolios).forEach(folder => {
+        const opt = document.createElement('option');
+        opt.value = folder;
+        opt.textContent = folder;
+        dirSelect.appendChild(opt);
+    });
+    
+    // Clear and populate Sectors
+    sectorSelect.innerHTML = '<option value="">-- All Sectors --</option>';
+    Object.keys(state.ranks.sectorsIndustries).forEach(sector => {
+        const opt = document.createElement('option');
+        opt.value = sector;
+        opt.textContent = sector;
+        sectorSelect.appendChild(opt);
+    });
+    
+    // Wire up dynamic dependency listeners
+    dirSelect.addEventListener('change', (e) => {
+        state.ranks.directory = e.target.value;
+        state.ranks.portfolio = '';
+        state.ranks.currentPage = 1;
+        populateRanksPortfolios(e.target.value);
+        loadRanksData();
+    });
+    
+    sectorSelect.addEventListener('change', (e) => {
+        state.ranks.sector = e.target.value;
+        state.ranks.industry = '';
+        state.ranks.currentPage = 1;
+        populateRanksIndustries(e.target.value);
+        loadRanksData();
+    });
+}
+
+function populateRanksPortfolios(folder) {
+    const portSelect = document.getElementById('rank-port-select');
+    portSelect.innerHTML = '<option value="">-- All Portfolios --</option>';
+    if (folder && state.ranks.dirsPortfolios[folder]) {
+        state.ranks.dirsPortfolios[folder].forEach(port => {
+            const opt = document.createElement('option');
+            opt.value = port;
+            opt.textContent = port;
+            portSelect.appendChild(opt);
+        });
+    }
+}
+
+function populateRanksIndustries(sector) {
+    const indSelect = document.getElementById('rank-industry-select');
+    indSelect.innerHTML = '<option value="">-- All Industries --</option>';
+    if (sector && state.ranks.sectorsIndustries[sector]) {
+        state.ranks.sectorsIndustries[sector].forEach(ind => {
+            const opt = document.createElement('option');
+            opt.value = ind;
+            opt.textContent = ind;
+            indSelect.appendChild(opt);
+        });
+    }
+}
+
+// Load Rankings Data from Server
+async function loadRanksData() {
+    showLoading(true);
+    try {
+        let url = `/data/ticker-ranks?period=${state.ranks.period}`;
+        if (state.ranks.directory) url += `&directory=${state.ranks.directory}`;
+        if (state.ranks.portfolio) url += `&portfolio=${state.ranks.portfolio}`;
+        if (state.ranks.sector) url += `&sector=${encodeURIComponent(state.ranks.sector)}`;
+        if (state.ranks.industry) url += `&industry=${encodeURIComponent(state.ranks.industry)}`;
+        if (state.ranks.rankFilter < 100) url += `&rank_filter=${state.ranks.rankFilter}`;
+        
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load ranking data');
+        state.ranks.rawTickers = await res.json();
+        state.ranks.dataLoaded = true;
+        
+        filterAndRenderRanksTable();
+    } catch (err) {
+        showError('Error loading ranking data: ' + err.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Filter and Render the Ranks Table
+function filterAndRenderRanksTable() {
+    let tickers = [...state.ranks.rawTickers];
+    
+    // Apply client-side text search
+    if (state.ranks.searchQuery) {
+        const query = state.ranks.searchQuery.toUpperCase();
+        tickers = tickers.filter(t => t.ticker.toUpperCase().includes(query));
+    }
+    
+    // Sort
+    const field = state.ranks.sortBy;
+    const dir = state.ranks.sortDir === 'asc' ? 1 : -1;
+    tickers.sort((a, b) => {
+        let valA = a[field];
+        let valB = b[field];
+        
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+        
+        if (typeof valA === 'string') {
+            return valA.localeCompare(valB) * dir;
+        }
+        return (valA - valB) * dir;
+    });
+    
+    state.ranks.filteredTickers = tickers;
+    document.getElementById('ranks-filtered-count').textContent = `(${tickers.length} tickers)`;
+    
+    // Pagination
+    const total = tickers.length;
+    const size = state.ranks.pageSize === 'all' ? total : parseInt(state.ranks.pageSize);
+    const totalPages = Math.ceil(total / size) || 1;
+    
+    if (state.ranks.currentPage > totalPages) {
+        state.ranks.currentPage = totalPages;
+    }
+    
+    const startIdx = (state.ranks.currentPage - 1) * size;
+    const endIdx = Math.min(startIdx + size, total);
+    const paginated = tickers.slice(startIdx, endIdx);
+    
+    // Update pagination info label
+    document.getElementById('ranks-pag-start').textContent = total === 0 ? 0 : startIdx + 1;
+    document.getElementById('ranks-pag-end').textContent = endIdx;
+    document.getElementById('ranks-pag-total').textContent = total;
+    
+    // Render Rows
+    const tbody = document.getElementById('ranks-table-body');
+    tbody.innerHTML = '';
+    
+    if (paginated.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No ranked tickers found matching current filters.</td></tr>`;
+        renderRanksPagination(totalPages);
+        return;
+    }
+    
+    paginated.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.className = 'clickable-row';
+        tr.innerHTML = `
+            <td class="text-bold">${t.ticker}</td>
+            <td class="text-right rank-highlight">#${t.risk_reward_rank}</td>
+            <td class="text-right ${t.over_pc >= 0 ? 'green-text' : 'red-text'}">${t.over_pc.toFixed(2)}%</td>
+            <td class="text-right">${t.pc_mean.toFixed(3)}%</td>
+            <td class="text-right">${t.pc_std.toFixed(3)}%</td>
+            <td class="text-right">#${t.prob_green_day_rank}</td>
+            <td class="text-right">#${t.stretch_score_rank}</td>
+            <td class="text-right">#${t.kelly_fraction_rank}</td>
+        `;
+        tr.addEventListener('click', () => showRanksDetail(t.ticker));
+        tbody.appendChild(tr);
+    });
+    
+    renderRanksPagination(totalPages);
+}
+
+// Render Rankings Pagination Controls
+function renderRanksPagination(totalPages) {
+    const nav = document.getElementById('ranks-pagination-nav');
+    nav.innerHTML = '';
+    
+    if (totalPages <= 1) return;
+    
+    // Prev Button
+    const prevBtn = document.createElement('button');
+    prevBtn.className = `btn btn-secondary btn-sm ${state.ranks.currentPage === 1 ? 'disabled' : ''}`;
+    prevBtn.innerHTML = '<i class="fa-solid fa-angle-left"></i>';
+    prevBtn.addEventListener('click', () => {
+        if (state.ranks.currentPage > 1) {
+            state.ranks.currentPage--;
+            filterAndRenderRanksTable();
+        }
+    });
+    nav.appendChild(prevBtn);
+    
+    // Page Numbers
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || Math.abs(state.ranks.currentPage - i) <= 1) {
+            const pageBtn = document.createElement('button');
+            pageBtn.className = `btn btn-sm ${state.ranks.currentPage === i ? 'btn-primary' : 'btn-secondary'}`;
+            pageBtn.textContent = i;
+            pageBtn.addEventListener('click', () => {
+                state.ranks.currentPage = i;
+                filterAndRenderRanksTable();
+            });
+            nav.appendChild(pageBtn);
+        } else if (i === 2 || i === totalPages - 1) {
+            const ellipsis = document.createElement('span');
+            ellipsis.className = 'pagination-ellipsis';
+            ellipsis.textContent = '...';
+            nav.appendChild(ellipsis);
+        }
+    }
+    
+    // Next Button
+    const nextBtn = document.createElement('button');
+    nextBtn.className = `btn btn-secondary btn-sm ${state.ranks.currentPage === totalPages ? 'disabled' : ''}`;
+    nextBtn.innerHTML = '<i class="fa-solid fa-angle-right"></i>';
+    nextBtn.addEventListener('click', () => {
+        if (state.ranks.currentPage < totalPages) {
+            state.ranks.currentPage++;
+            filterAndRenderRanksTable();
+        }
+    });
+    nav.appendChild(nextBtn);
+}
+
+// Show Ticker Rankings Multi-period Detail Cards
+async function showRanksDetail(ticker) {
+    const panel = document.getElementById('ranks-detail-panel');
+    panel.classList.remove('hidden');
+    
+    document.getElementById('detail-ticker-name').textContent = ticker;
+    document.getElementById('detail-company-info').textContent = 'Loading profile details...';
+    
+    const container = document.getElementById('detail-periods-container');
+    container.innerHTML = '<div class="spinner-container"><div class="spinner"></div></div>';
+    
+    try {
+        let url = `/data/ticker-ranks/detail?ticker=${ticker}`;
+        if (state.ranks.rankFilter < 100) url += `&rank_filter=${state.ranks.rankFilter}`;
+        
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load ticker detail');
+        const periods = await res.json();
+        
+        container.innerHTML = '';
+        if (periods.length === 0) {
+            container.innerHTML = '<p class="text-muted">No rankings records available for this ticker under current filters.</p>';
+            return;
+        }
+        
+        // Update profile labels
+        const first = periods[0];
+        document.getElementById('detail-company-info').textContent = `${first.sector || 'Unknown'} — ${first.industry || 'Unknown'}`;
+        
+        periods.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'period-detail-card';
+            card.innerHTML = `
+                <div class="period-detail-header">
+                    <span>${p.Period}</span>
+                    <span class="rank-highlight">Rank #${p.risk_reward_rank}</span>
+                </div>
+                <div class="period-detail-stats">
+                    <div class="detail-stat-row">
+                        <span>Return</span>
+                        <span class="${p.over_pc >= 0 ? 'green-text' : 'red-text'}">${p.over_pc.toFixed(2)}%</span>
+                    </div>
+                    <div class="detail-stat-row">
+                        <span>Mean Return</span>
+                        <span>${p.pc_mean.toFixed(3)}%</span>
+                    </div>
+                    <div class="detail-stat-row">
+                        <span>Volatility</span>
+                        <span>${p.pc_std.toFixed(3)}%</span>
+                    </div>
+                    <div class="detail-stat-row">
+                        <span>Prob Green</span>
+                        <span class="rank-highlight">#${p.prob_green_day_rank} (${p['prob_green_day_%'].toFixed(1)}%)</span>
+                    </div>
+                    <div class="detail-stat-row">
+                        <span>Stretch</span>
+                        <span>#${p.stretch_score_rank} (${p.stretch_score.toFixed(2)})</span>
+                    </div>
+                    <div class="detail-stat-row">
+                        <span>Kelly</span>
+                        <span>#${p.kelly_fraction_rank} (${p.kelly_fraction.toFixed(2)})</span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    } catch (err) {
+        container.innerHTML = `<p class="red-text">Error: ${err.message}</p>`;
+    }
 }
 
 // Application Startup

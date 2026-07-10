@@ -29,6 +29,17 @@
             "request": "launch",
             "program": "${workspaceFolder}/stock_mdb/load_missing.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Run: Update Ticker Metadata",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/database/update_ticker_metadata.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "RAPID_API_KEY": "${env:RAPID_API_KEY}"
+            }
         }
     ]
 }

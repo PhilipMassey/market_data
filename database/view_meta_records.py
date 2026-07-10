@@ -13,24 +13,11 @@ def view_meta_records(limit=100, sector=None):
     Returns:
         pd.DataFrame: DataFrame containing ticker, sector, and industry columns.
     """
-    # Resolve directory path: try PYTHONPATH first
-    pythonpath = os.environ.get('PYTHONPATH')
-    db_path = None
-    if pythonpath:
-        # PYTHONPATH can contain multiple paths separated by ':' on macOS/Linux
-        for p in pythonpath.split(':'):
-            possible_path = os.path.join(p.strip(), 'database', 'market_data.db')
-            if os.path.exists(possible_path):
-                db_path = possible_path
-                break
-                
-    # Fallback path resolution
-    if not db_path or not os.path.exists(db_path):
-        base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
-        db_path = os.path.join(base_dir, 'market_data.db')
+    from database.sqlite_connection import SQLITE_DB_PATH
+    db_path = SQLITE_DB_PATH
         
     if not db_path or not os.path.exists(db_path):
-        print("Error: Database file market_data.db not found.")
+        print(f"Error: Database file not found at {db_path}.")
         return None
         
     conn = sqlite3.connect(db_path)

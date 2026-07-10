@@ -44,7 +44,8 @@ def mock_sqlite_conn():
         yield conn
         conn.commit()
         
-    with patch('stock_mdb.market_data_close.get_sqlite_conn', _get_conn):
+    with patch('stock_mdb.market_data_close.get_sqlite_conn', _get_conn), \
+         patch('stock_mdb.market_data_close.init_sqlite_db'):
         yield conn
         
     conn.close()

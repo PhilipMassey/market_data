@@ -801,3 +801,143 @@ tbody tr:hover {
     border-top: 1px solid var(--border-glass);
     margin-top: auto;
 }
+
+/* Ticker Rankings Screen Styles */
+.ranks-selectors select {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    cursor: pointer;
+    outline: none;
+    min-width: 160px;
+    transition: var(--transition-smooth);
+}
+.ranks-selectors select:focus {
+    border-color: var(--color-primary);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.slider-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-glass);
+    width: 100%;
+}
+.slider-container label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 180px;
+}
+.slider {
+    flex-grow: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+    -webkit-appearance: none;
+}
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+.slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.ranks-content-section {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    align-items: start;
+}
+@media (max-width: 1200px) {
+    .ranks-content-section {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ranks-detail-card {
+    position: sticky;
+    top: 1.5rem;
+    padding: 1.5rem;
+}
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-glass);
+    padding-bottom: 1rem;
+}
+.btn-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.25rem;
+    transition: var(--transition-smooth);
+}
+.btn-close:hover {
+    color: var(--color-danger);
+}
+.detail-periods-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+.period-detail-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 1rem;
+    transition: var(--transition-smooth);
+}
+.period-detail-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-2px);
+}
+.period-detail-header {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--color-primary);
+    margin-bottom: 0.75rem;
+}
+.period-detail-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+.detail-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+}
+.detail-stat-row span:first-child {
+    color: var(--text-secondary);
+}
+.detail-stat-row span:last-child {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.rank-highlight {
+    color: var(--color-warning) !important;
+    font-weight: 700;
+}

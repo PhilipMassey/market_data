@@ -63,6 +63,9 @@
                 <button id="tab-btn-comparison" class="tab-btn">
                     <i class="fa-solid fa-scale-balanced"></i> Performance Comparison
                 </button>
+                <button id="tab-btn-ranks" class="tab-btn">
+                    <i class="fa-solid fa-list-ol"></i> Ticker Rankings
+                </button>
             </div>
 
             <!-- ================= VIEW 1: HOLDINGS VALUATION ================= -->
@@ -195,11 +198,10 @@
                                         <th data-sort="symbol" class="sortable">Ticker <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="account_name" class="sortable">Account <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="quantity" class="sortable text-right">Quantity <i class="fa-solid fa-sort"></i></th>
-                                        <th data-sort="average_cost_basis" class="sortable text-right">Avg Cost <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="cost_basis_total" class="sortable text-right">Cost Basis <i class="fa-solid fa-sort"></i></th>
-                                        <th data-sort="current_price" class="sortable text-right">Last Price <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="dynamic_value" class="sortable text-right">Current Value <i class="fa-solid fa-sort"></i></th>
-                                        <th data-sort="gain_loss_dollar" class="sortable text-right">Gain / Loss <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="gain_loss_dollar" class="sortable text-right">Gain / Loss ($) <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="gain_loss_percent" class="sortable text-right">Gain / Loss (%) <i class="fa-solid fa-sort"></i></th>
                                     </tr>
                                 </thead>
                                 <tbody id="holdings-table-body">
@@ -333,6 +335,118 @@
                                 Showing <span id="comp-pag-start">0</span> to <span id="comp-pag-end">0</span> of <span id="comp-pag-total">0</span> entries
                             </div>
                             <div class="pagination-buttons" id="comparison-pagination-nav">
+                                <!-- Injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ================= VIEW 3: TICKER RANKINGS ================= -->
+            <div id="view-ranks" class="tab-view hidden">
+                <!-- Filters & Controls Bar -->
+                <section class="comparison-selectors card card-glass">
+                    <div class="selector-container ranks-selectors">
+                        <div class="selector-field">
+                            <label for="rank-period-select"><i class="fa-solid fa-clock"></i> Period:</label>
+                            <select id="rank-period-select">
+                                <option value="Daily">Daily (10 Days)</option>
+                                <option value="1 Week">1 Week</option>
+                                <option value="2 Weeks">2 Weeks</option>
+                                <option value="1 Month" selected>1 Month</option>
+                                <option value="2 Months">2 Months</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="rank-dir-select"><i class="fa-solid fa-folder"></i> Folder:</label>
+                            <select id="rank-dir-select">
+                                <option value="">-- All Folders --</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="rank-port-select"><i class="fa-solid fa-file-csv"></i> Portfolio:</label>
+                            <select id="rank-port-select">
+                                <option value="">-- All Portfolios --</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="rank-sector-select"><i class="fa-solid fa-industry"></i> Sector:</label>
+                            <select id="rank-sector-select">
+                                <option value="">-- All Sectors --</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="rank-industry-select"><i class="fa-solid fa-gear"></i> Industry:</label>
+                            <select id="rank-industry-select">
+                                <option value="">-- All Industries --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="slider-container">
+                        <label for="rank-slider-input"><i class="fa-solid fa-sliders"></i> Rank Threshold: <span id="rank-slider-val">All</span></label>
+                        <input type="range" id="rank-slider-input" min="1" max="100" value="100" class="slider">
+                    </div>
+                </section>
+
+                <!-- Dual Panels: Ranks Table & Ticker Details -->
+                <section class="ranks-content-section">
+                    <!-- Left: Ticker Ranks Table -->
+                    <div class="card card-glass ranks-table-card">
+                        <div class="table-toolbar">
+                            <div class="toolbar-left">
+                                <h3>Ranked Tickers</h3>
+                                <span id="ranks-filtered-count" class="text-muted">(0 tickers)</span>
+                            </div>
+                            <div class="toolbar-right">
+                                <div class="search-box">
+                                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                                    <input type="text" id="ranks-search-input" placeholder="Search by ticker...">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table id="ranks-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="ticker" class="sortable">Ticker <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="risk_reward_rank" class="sortable text-right">Risk-Reward <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="over_pc" class="sortable text-right">Return % <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="pc_mean" class="sortable text-right">Mean Return % <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="pc_std" class="sortable text-right">Volatility % <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="prob_green_day_rank" class="sortable text-right">Prob Green <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="stretch_score_rank" class="sortable text-right">Stretch <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="kelly_fraction_rank" class="sortable text-right">Kelly <i class="fa-solid fa-sort"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ranks-table-body">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="table-pagination">
+                            <div class="pagination-info">
+                                Showing <span id="ranks-pag-start">0</span> to <span id="ranks-pag-end">0</span> of <span id="ranks-pag-total">0</span> entries
+                            </div>
+                            <div class="pagination-buttons" id="ranks-pagination-nav">
+                                <!-- Injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Ticker Detail Panel -->
+                    <div class="card card-glass ranks-detail-card hidden" id="ranks-detail-panel">
+                        <div class="detail-header">
+                            <div class="detail-header-left">
+                                <h2 id="detail-ticker-name">AAPL</h2>
+                                <span id="detail-company-info" class="text-muted">Technology — Consumer Electronics</span>
+                            </div>
+                            <button id="btn-close-detail" class="btn-close">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <div class="detail-body">
+                            <h4>Performance Across All Periods</h4>
+                            <div class="detail-periods-grid" id="detail-periods-container">
                                 <!-- Injected by JS -->
                             </div>
                         </div>

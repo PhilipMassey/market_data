@@ -95,7 +95,7 @@ def test_home_route():
 
 def test_api_portfolio_route(mock_sqlite_db):
     client = app.test_client()
-    response = client.get('/api/portfolio')
+    response = client.get('/data/portfolio')
     assert response.status_code == 200
     
     data = response.json
@@ -145,7 +145,7 @@ def test_api_business_days_route():
         mock_get_days.return_value = ['2026-06-08', '2026-06-05', '2026-06-04']
         
         client = app.test_client()
-        response = client.get('/api/business-days')
+        response = client.get('/data/business-days')
         assert response.status_code == 200
         data = response.json
         assert data == ['2026-06-08', '2026-06-05', '2026-06-04']
@@ -158,7 +158,7 @@ def test_api_compare_route(mock_sqlite_db):
         client = app.test_client()
         
         # Test with explicit parameters
-        response = client.get('/api/compare?start_date=2026-06-01&end_date=2026-06-07')
+        response = client.get('/data/compare?start_date=2026-06-01&end_date=2026-06-07')
         assert response.status_code == 200
         
         data = response.json
@@ -209,14 +209,14 @@ def test_api_compare_route_defaults(mock_sqlite_db):
         mock_get_days.return_value = ['2026-06-07', '2026-06-01']
         
         client = app.test_client()
-        response = client.get('/api/compare')
+        response = client.get('/data/compare')
         assert response.status_code == 200
         
         data = response.json
         assert data['start_date'] == '2026-06-01'
         assert data['end_date'] == '2026-06-07'
 
-def test_api_compare_quantity_change():
+def test_api_compare_quantity_change(mock_sqlite_db):
     # Test that compare endpoint calculates gains/losses correctly when quantity changes
     with patch('portfolio.portfolio_dashboard.get_nyse_business_days_comparison') as mock_get_days, \
          patch('portfolio.portfolio_dashboard.fetch_portfolio_at_date') as mock_fetch_at_date, \
@@ -270,7 +270,7 @@ def test_api_compare_quantity_change():
         mock_get_price.return_value = 160.0
         
         client = app.test_client()
-        response = client.get('/api/compare?start_date=2026-06-01&end_date=2026-06-07')
+        response = client.get('/data/compare?start_date=2026-06-01&end_date=2026-06-07')
         assert response.status_code == 200
         
         data = response.json
@@ -312,7 +312,7 @@ def test_api_compare_hybrid_date_resolution(mock_sqlite_db):
     # - 2026-06-08 resolves to quantities on 2026-06-07 (AAPL: qty 10.0)
     #   Price on 2026-06-08 is 150.0 (market_data_close has price 150.0 on 2026-06-08)
     client = app.test_client()
-    response = client.get('/api/compare?start_date=2026-06-02&end_date=2026-06-08')
+    response = client.get('/data/compare?start_date=2026-06-02&end_date=2026-06-08')
     assert response.status_code == 200
     data = response.json
     

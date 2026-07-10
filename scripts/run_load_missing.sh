@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Determine the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Determine the project root directory (parent of the scripts/ folder)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 cd "$SCRIPT_DIR"
 
 # Verify that the virtual environment exists

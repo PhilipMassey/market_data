@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Determine the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Determine the project root directory (parent of the scripts/ folder)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 cd "$SCRIPT_DIR"
 
 # Verify that the virtual environment exists
@@ -21,14 +21,8 @@ export PORT="${PORT:-5001}"
 if [ -n "$SQLITE_DB_PATH" ]; then
     echo "Using custom SQLITE_DB_PATH: $SQLITE_DB_PATH"
 else
-    # Determine default DB path based on database/sqlite_connection.py logic
-    LOCAL_DB="$SCRIPT_DIR/database/market_data.db"
     DEFAULT_DB="/Users/philipmassey/projects/.data/market_data.db"
-    if [ -f "$LOCAL_DB" ]; then
-        echo "Using local database: $LOCAL_DB"
-    else
-        echo "Using default database: $DEFAULT_DB"
-    fi
+    echo "Using default database: $DEFAULT_DB"
 fi
 
 echo "Starting Portfolio Dashboard on port $PORT in the background..."
