@@ -119,16 +119,23 @@ def test_process_fidelity_export(mock_sqlite_db, tmp_path):
     )
     csv_file.write_text(data)
 
+    # Pre-populate database with an old position from a previous run
+    cursor = mock_sqlite_db.cursor()
+    cursor.execute("""
+        INSERT INTO fidelity_positions (date, symbol, quantity, current_value)
+        VALUES ('2026-05-01', 'OLD_TICKER', 10, 500.0)
+    """)
+    mock_sqlite_db.commit()
+
     # Process
     with patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)):
         process_fidelity_export(str(csv_file))
 
     # Read from in-memory SQLite and check database insertions
-    cursor = mock_sqlite_db.cursor()
     cursor.execute("SELECT symbol FROM fidelity_positions ORDER BY symbol")
     rows = cursor.fetchall()
 
-    # All unique symbols (including cash/core SPAXX**) should be in db
+    # Old position 'OLD_TICKER' should be deleted, only current unique symbols should be in db
     assert len(rows) == 5
     assert [r[0] for r in rows] == ['AAPL', 'MSFT', 'QQQ', 'SPAXX**', 'SPY']
 
@@ -176,32 +183,45 @@ def test_process_seeking_alpha_exports_no_files(tmp_path):
         assert not target_dir.exists()
 
 def test_process_seeking_alpha_exports_success(tmp_path):
+    from openpyxl import Workbook
+    
     # Setup mock Downloads dir with some Excel files
     downloads_dir = tmp_path / "Downloads"
     downloads_dir.mkdir()
     
+    # Create older file (should be skipped)
     file_old = downloads_dir / "Current Dividends 2026-06-12.xlsx"
-    file_new = downloads_dir / "Current Dividends 2026-06-14.xlsx"
-    file_other = downloads_dir / "Top Stocks 2026-06-14.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['Symbol'])
+    ws.append(['OLD_SHOULD_NOT_APPEAR'])
+    wb.save(str(file_old))
     
-    # We will mock pandas.read_excel to return different DataFrames depending on the file
-    def mock_read_excel(file_path, *args, **kwargs):
-        name = os.path.basename(file_path)
-        if name == "Current Dividends 2026-06-14.xlsx":
-            return pd.DataFrame({'Symbol': ['AGNC', 'adx', 'JEPQ', '', 'JEPQ']})  # Has duplicates, lowercase, empty
-        elif name == "Current Dividends 2026-06-12.xlsx":
-            # This is the older one, should NOT be read
-            raise AssertionError("Should not read older file version!")
-        elif name == "Top Stocks 2026-06-14.xlsx":
-            return pd.DataFrame({'Symbol': ['AAPL', 'MSFT']})
-        else:
-            raise ValueError(f"Unexpected file path: {file_path}")
-
+    # Create newer file with duplicates, lowercase, empty
+    file_new = downloads_dir / "Current Dividends 2026-06-14.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['Symbol'])
+    ws.append(['AGNC'])
+    ws.append(['adx'])
+    ws.append(['JEPQ'])
+    ws.append([''])
+    ws.append(['JEPQ'])  # duplicate
+    wb.save(str(file_new))
+    
+    # Create Top Stocks file
+    file_other = downloads_dir / "Top Stocks 2026-06-14.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['Symbol'])
+    ws.append(['AAPL'])
+    ws.append(['MSFT'])
+    wb.save(str(file_other))
+    
     # Patch glob.glob to return all three files
     files = [str(file_old), str(file_new), str(file_other)]
     
     with patch('glob.glob', return_value=files), \
-         patch('pandas.read_excel', side_effect=mock_read_excel), \
          patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)):
         res = process_seeking_alpha_exports()
         assert res is True
@@ -227,26 +247,30 @@ def test_process_seeking_alpha_exports_success(tmp_path):
         assert df_top['Symbol'].tolist() == ['AAPL', 'MSFT']
 
 def test_process_seeking_alpha_exports_missing_symbol_column(tmp_path):
+    from openpyxl import Workbook
+    
     downloads_dir = tmp_path / "Downloads"
     downloads_dir.mkdir()
     
+    # Create file with wrong column name
     file_bad = downloads_dir / "Current Dividends 2026-06-14.xlsx"
-    file_good = downloads_dir / "Top Stocks 2026-06-14.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['WrongColumn'])
+    ws.append(['AGNC'])
+    wb.save(str(file_bad))
     
-    def mock_read_excel(file_path, *args, **kwargs):
-        name = os.path.basename(file_path)
-        if name == "Current Dividends 2026-06-14.xlsx":
-            # Missing 'Symbol' column
-            return pd.DataFrame({'WrongColumn': ['AGNC']})
-        elif name == "Top Stocks 2026-06-14.xlsx":
-            return pd.DataFrame({'Symbol': ['AAPL']})
-        else:
-            raise ValueError(f"Unexpected file path: {file_path}")
+    # Create good file
+    file_good = downloads_dir / "Top Stocks 2026-06-14.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['Symbol'])
+    ws.append(['AAPL'])
+    wb.save(str(file_good))
 
     files = [str(file_bad), str(file_good)]
     
     with patch('glob.glob', return_value=files), \
-         patch('pandas.read_excel', side_effect=mock_read_excel), \
          patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)):
         res = process_seeking_alpha_exports()
         # Should return False overall because one file failed
@@ -270,42 +294,30 @@ def test_compare_holdings_and_write_mismatches_with_differences(tmp_path):
     holding_dir = tmp_path / "tickers" / "Holding"
     holding_dir.mkdir(parents=True)
     
-    # 1. Create matching/mismatching files
     # Current Stocks: AAPL, GOOG, MSFT
     # Stocks: AAPL, MSFT, TSLA
-    # Mismatch: GOOG only in Current, TSLA only in target
+    # Mismatch: GOOG only in Current, TSLA only in Holding
     pd.DataFrame({'Symbol': ['AAPL', 'GOOG', 'MSFT']}).to_csv(holding_dir / "Current Stocks.csv", index=False)
     pd.DataFrame({'Symbol': ['AAPL', 'MSFT', 'TSLA']}).to_csv(holding_dir / "Stocks.csv", index=False)
     
-    # Current ETFs: QQQ, SPY
-    # ETFs: QQQ, SPY
-    # Match perfectly
+    # Current ETFs: QQQ, SPY — perfect match
     pd.DataFrame({'Symbol': ['QQQ', 'SPY']}).to_csv(holding_dir / "Current ETFs.csv", index=False)
     pd.DataFrame({'Symbol': ['QQQ', 'SPY']}).to_csv(holding_dir / "ETFs.csv", index=False)
     
-    downloads_dir = tmp_path / "Downloads"
+    import io
+    from contextlib import redirect_stdout
     
-    original_expanduser = os.path.expanduser
-    def mock_expanduser(path):
-        if path == '~/Downloads':
-            return str(downloads_dir)
-        return original_expanduser(path)
-    
-    with patch('os.path.expanduser', side_effect=mock_expanduser), \
-         patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)):
+    f = io.StringIO()
+    with redirect_stdout(f):
         compare_holdings_and_write_mismatches(str(tmp_path))
-        
-    # Verify report was written
-    report_file = downloads_dir / "mismatches.txt"
-    assert report_file.exists()
     
-    content = report_file.read_text()
-    assert "Category: Stocks" in content
-    assert "Only in 'Current Stocks' (Seeking Alpha) [1 symbols]:" in content
-    assert "GOOG" in content
-    assert "Only in 'Stocks' (Fidelity) [1 symbols]:" in content
-    assert "TSLA" in content
-    assert "Category: ETFs" not in content  # Matching categories shouldn't be detailed as mismatching
+    output = f.getvalue()
+    assert "Stocks:" in output
+    assert "In Current but not Holding" in output
+    assert "GOOG" in output
+    assert "In Holding but not Current" in output
+    assert "TSLA" in output
+    assert "ETFs:" not in output  # Matching categories shouldn't appear
 
 def test_compare_holdings_and_write_mismatches_perfect_match(tmp_path):
     holding_dir = tmp_path / "tickers" / "Holding"
@@ -314,20 +326,13 @@ def test_compare_holdings_and_write_mismatches_perfect_match(tmp_path):
     pd.DataFrame({'Symbol': ['AAPL']}).to_csv(holding_dir / "Current Stocks.csv", index=False)
     pd.DataFrame({'Symbol': ['AAPL']}).to_csv(holding_dir / "Stocks.csv", index=False)
     
-    downloads_dir = tmp_path / "Downloads"
+    import io
+    from contextlib import redirect_stdout
     
-    original_expanduser = os.path.expanduser
-    def mock_expanduser(path):
-        if path == '~/Downloads':
-            return str(downloads_dir)
-        return original_expanduser(path)
-    
-    with patch('os.path.expanduser', side_effect=mock_expanduser), \
-         patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)):
+    f = io.StringIO()
+    with redirect_stdout(f):
         compare_holdings_and_write_mismatches(str(tmp_path))
-        
-    report_file = downloads_dir / "mismatches.txt"
-    assert report_file.exists()
-    content = report_file.read_text()
-    assert "All categories match perfectly. No mismatches found!" in content
+    
+    output = f.getvalue()
+    assert "All categories match. No differences found." in output
 

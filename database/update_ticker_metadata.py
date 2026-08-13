@@ -10,39 +10,37 @@ if project_root not in sys.path:
 
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
 from portfolio.ticker_period_ranks_data import clear_cache
+from utils.ticker_reader import get_tickers_from_directory
 
 
 def get_unassigned_tickers():
     """
-    Identifies tickers from portfolio positions or historical close prices
-    that lack sector or industry profile metadata in SQLite.
+    Identifies tickers from portfolio positions, historical close prices,
+    or CSV ticker lists that lack sector or industry profile metadata in SQLite.
     """
     init_sqlite_db()
     
     with get_sqlite_conn() as conn:
         cursor = conn.cursor()
         
-        # 1. Fetch unique tickers from historical close prices
-        cursor.execute("SELECT DISTINCT ticker FROM market_data_close")
-        db_tickers = {row[0].upper() for row in cursor.fetchall() if row[0]}
         
-        # 2. Fetch unique symbols from Fidelity positions
-        cursor.execute("SELECT DISTINCT symbol FROM fidelity_positions")
-        fid_tickers = {row[0].upper() for row in cursor.fetchall() if row[0]}
-        
-        # Combine sets
-        all_tickers = db_tickers.union(fid_tickers)
+        # 3. Fetch unique tickers from CSV portfolio files
+        try:
+            csv_tickers = {t.upper() for t in get_tickers_from_directory('ALL_FOLDERS') if t}
+        except Exception:
+            csv_tickers = set()
+
         
         # Filter out cash designations
         ignored_symbols = {
             'FDIC-INSURED DEPOSIT SWEEP', 'PENDING ACTIVITY', 'FCASH', 'CASH', 'PENDING'
         }
         all_tickers = {
-            t for t in all_tickers 
+            t for t in csv_tickers 
             if t and not t.endswith('**') and t not in ignored_symbols
         }
         
-        # 3. Find tickers that already exist in ticker_meta_profile
+        # 4. Find tickers that already exist in ticker_meta_profile
         cursor.execute("SELECT ticker FROM ticker_meta_profile")
         existing_tickers = {row[0].upper() for row in cursor.fetchall()}
         
@@ -65,7 +63,7 @@ def silence_outputs():
         yield
 
 
-def update_ticker_metadata(delay=0.2):
+def update_ticker_metadata(delay=0.2, limit=None):
     """
     Identifies unassigned tickers, fetches their metadata from Yahoo Finance using yfinance,
     saves the 5-column metadata to SQLite, and invalidates rankings cache.
@@ -73,6 +71,8 @@ def update_ticker_metadata(delay=0.2):
     init_sqlite_db()
     
     unassigned = get_unassigned_tickers()
+    if limit is not None:
+        unassigned = unassigned[:limit]
     if not unassigned:
         print("No unassigned tickers found. Database is fully up-to-date!")
         return True
@@ -108,18 +108,22 @@ def update_ticker_metadata(delay=0.2):
             if sector == "Information Technology":
                 sector = "Technology"
                 
+            # Skip record if no value for 'sector' or 'industry'
+            if not sector or sector == "Unknown" or not industry or industry == "Unknown":
+                no_metadata_tickers.append(ticker)
+                # Prevent hitting Yahoo Finance rate limits
+                if idx < len(unassigned) - 1:
+                    time.sleep(delay)
+                continue
+
             cursor.execute("""
                 INSERT OR IGNORE INTO ticker_meta_profile (ticker, company_name, type, sector, industry)
                 VALUES (?, ?, ?, ?, ?)
             """, (ticker, company_name, quote_type, sector, industry))
             
-            # If it could not retrieve any meaningful fields (all default to Unknown), classify as No Metadata
-            if company_name == "Unknown" and sector == "Unknown" and industry == "Unknown":
-                no_metadata_tickers.append(ticker)
-            else:
-                inserted_records.append(
-                    f"  {ticker} - Name='{company_name}' | Type={quote_type} | Sector={sector} | Industry={industry}"
-                )
+            inserted_records.append(
+                f"  {ticker} - Name='{company_name}' | Type={quote_type} | Sector={sector} | Industry={industry}"
+            )
                 
             # Prevent hitting Yahoo Finance rate limits
             if idx < len(unassigned) - 1:

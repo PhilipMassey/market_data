@@ -71,7 +71,8 @@ def mock_db_env():
         conn.commit()
 
     with patch('database.update_ticker_metadata.get_sqlite_conn', _get_conn), \
-         patch('database.update_ticker_metadata.init_sqlite_db'):
+         patch('database.update_ticker_metadata.init_sqlite_db'), \
+         patch('database.update_ticker_metadata.get_tickers_from_directory', return_value=['GOOG', 'MSFT']):
         yield conn
         
     conn.close()
@@ -80,7 +81,7 @@ def mock_db_env():
 def test_get_unassigned_tickers(mock_db_env):
     unassigned = get_unassigned_tickers()
     # AAPL is assigned. SPAXX** is cash.
-    # MSFT and GOOG should be unassigned.
+    # MSFT and GOOG should be unassigned from CSV ticker files.
     assert unassigned == ['GOOG', 'MSFT']
 
 

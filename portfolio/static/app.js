@@ -1097,7 +1097,7 @@ function filterAndRenderRanksTable() {
             <td class="text-right ${t.over_pc >= 0 ? 'green-text' : 'red-text'}">${t.over_pc.toFixed(2)}%</td>
             <td class="text-right">${t.pc_mean.toFixed(3)}%</td>
             <td class="text-right">${t.pc_std.toFixed(3)}%</td>
-            <td class="text-right">#${t.prob_green_day_rank}</td>
+            <td class="text-right">#${t.rel_strength_ind_rank}</td>
             <td class="text-right">#${t.stretch_score_rank}</td>
             <td class="text-right">#${t.kelly_fraction_rank}</td>
         `;
@@ -1159,7 +1159,7 @@ function renderRanksPagination(totalPages) {
     nav.appendChild(nextBtn);
 }
 
-// Show Ticker Rankings Multi-period Detail Cards
+// Show Ticker Rankings Multi-period Detail Table
 async function showRanksDetail(ticker) {
     const panel = document.getElementById('ranks-detail-panel');
     panel.classList.remove('hidden');
@@ -1168,7 +1168,7 @@ async function showRanksDetail(ticker) {
     document.getElementById('detail-company-info').textContent = 'Loading profile details...';
     
     const container = document.getElementById('detail-periods-container');
-    container.innerHTML = '<div class="spinner-container"><div class="spinner"></div></div>';
+    container.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;"><div class="spinner"></div></td></tr>';
     
     try {
         let url = `/data/ticker-ranks/detail?ticker=${ticker}`;
@@ -1180,7 +1180,7 @@ async function showRanksDetail(ticker) {
         
         container.innerHTML = '';
         if (periods.length === 0) {
-            container.innerHTML = '<p class="text-muted">No rankings records available for this ticker under current filters.</p>';
+            container.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:1rem;">No rankings records available for this ticker under current filters.</td></tr>';
             return;
         }
         
@@ -1189,45 +1189,41 @@ async function showRanksDetail(ticker) {
         document.getElementById('detail-company-info').textContent = `${first.sector || 'Unknown'} — ${first.industry || 'Unknown'}`;
         
         periods.forEach(p => {
-            const card = document.createElement('div');
-            card.className = 'period-detail-card';
-            card.innerHTML = `
-                <div class="period-detail-header">
-                    <span>${p.Period}</span>
-                    <span class="rank-highlight">Rank #${p.risk_reward_rank}</span>
-                </div>
-                <div class="period-detail-stats">
-                    <div class="detail-stat-row">
-                        <span>Return</span>
-                        <span class="${p.over_pc >= 0 ? 'green-text' : 'red-text'}">${p.over_pc.toFixed(2)}%</span>
-                    </div>
-                    <div class="detail-stat-row">
-                        <span>Mean Return</span>
-                        <span>${p.pc_mean.toFixed(3)}%</span>
-                    </div>
-                    <div class="detail-stat-row">
-                        <span>Volatility</span>
-                        <span>${p.pc_std.toFixed(3)}%</span>
-                    </div>
-                    <div class="detail-stat-row">
-                        <span>Prob Green</span>
-                        <span class="rank-highlight">#${p.prob_green_day_rank} (${p['prob_green_day_%'].toFixed(1)}%)</span>
-                    </div>
-                    <div class="detail-stat-row">
-                        <span>Stretch</span>
-                        <span>#${p.stretch_score_rank} (${p.stretch_score.toFixed(2)})</span>
-                    </div>
-                    <div class="detail-stat-row">
-                        <span>Kelly</span>
-                        <span>#${p.kelly_fraction_rank} (${p.kelly_fraction.toFixed(2)})</span>
-                    </div>
-                </div>
+            const dateRange = formatDateRange(p['Date Range'] || '');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${p.Period}</strong></td>
+                <td class="text-muted">${dateRange}</td>
+                <td class="text-right rank-highlight">#${p.risk_reward_rank}</td>
+                <td class="text-right ${p.over_pc >= 0 ? 'green-text' : 'red-text'}">${p.over_pc.toFixed(2)}%</td>
+                <td class="text-right">${p.pc_mean.toFixed(3)}%</td>
+                <td class="text-right">${p.pc_std.toFixed(3)}%</td>
+                <td class="text-right ${p.rel_strength_ind !== null && p.rel_strength_ind !== undefined ? (p.rel_strength_ind >= 0 ? 'green-text' : 'red-text') : ''}">${p.rel_strength_ind !== null && p.rel_strength_ind !== undefined ? (p.rel_strength_ind >= 0 ? '+' : '') + p.rel_strength_ind.toFixed(2) + '%' : 'N/A'} <span class="rank-highlight">#${p.rel_strength_ind_rank}</span></td>
+                <td class="text-right">${p.stretch_score.toFixed(2)} <span class="rank-highlight">#${p.stretch_score_rank}</span></td>
+                <td class="text-right">${p.kelly_fraction.toFixed(2)} <span class="rank-highlight">#${p.kelly_fraction_rank}</span></td>
             `;
-            container.appendChild(card);
+            container.appendChild(row);
         });
     } catch (err) {
-        container.innerHTML = `<p class="red-text">Error: ${err.message}</p>`;
+        container.innerHTML = `<tr><td colspan="9" class="red-text" style="text-align:center;padding:1rem;">Error: ${err.message}</td></tr>`;
     }
+}
+
+// Format date range string from "YYYY-MM-DD to YYYY-MM-DD" to "Jul 1 to Jul 10"
+function formatDateRange(rangeStr) {
+    if (!rangeStr) return '';
+    const parts = rangeStr.split(' to ');
+    if (parts.length !== 2) return rangeStr;
+    
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    function fmtDate(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        if (isNaN(d)) return dateStr;
+        return `${months[d.getMonth()]} ${d.getDate()}`;
+    }
+    
+    return `${fmtDate(parts[0])} – ${fmtDate(parts[1])}`;
 }
 
 // Application Startup

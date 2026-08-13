@@ -38,6 +38,24 @@
             }
         },
         {
+            "label": "📊 Update Ticker Metadata",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "${workspaceFolder}/database/update_ticker_metadata.py"
+            ],
+            "options": {
+                "env": {
+                    "PYTHONPATH": "${workspaceFolder}"
+                }
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "📊 Run Portfolio Valuation Dashboard",
             "type": "shell",
             "command": "${workspaceFolder}/.venv/bin/python",

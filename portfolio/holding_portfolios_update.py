@@ -77,6 +77,65 @@ def df_fidelity_positions_aggregate_columns(df: pd.DataFrame) -> pd.DataFrame:
     agg_df = agg_df.rename(columns={'index': 'Symbol'})
     return agg_df
 
+def _read_xlsx_data_only(file_path: str) -> pd.DataFrame:
+    """
+    Read cell values from an xlsx file by parsing the zip/XML directly.
+    This bypasses openpyxl's conditional formatting parser which crashes on
+    Seeking Alpha exports with unsupported filter operators.
+    """
+    import zipfile
+    from xml.etree import ElementTree
+    
+    ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    
+    with zipfile.ZipFile(file_path) as z:
+        # Read shared strings table
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in z.namelist():
+            tree = ElementTree.parse(z.open('xl/sharedStrings.xml'))
+            for si in tree.iter(f'{{{ns}}}si'):
+                t = si.find(f'.//{{{ns}}}t')
+                shared_strings.append(t.text if t is not None and t.text else '')
+        
+        # Read first sheet data
+        tree = ElementTree.parse(z.open('xl/worksheets/sheet1.xml'))
+        
+        rows = []
+        for row_elem in tree.iter(f'{{{ns}}}row'):
+            row_data = []
+            for cell in row_elem.findall(f'{{{ns}}}c'):
+                cell_type = cell.get('t', '')
+                val_elem = cell.find(f'{{{ns}}}v')
+                if cell_type == 'inlineStr':
+                    # Inline string: value is in <is><t>text</t></is>
+                    is_elem = cell.find(f'{{{ns}}}is')
+                    if is_elem is not None:
+                        t = is_elem.find(f'{{{ns}}}t')
+                        row_data.append(t.text if t is not None and t.text else '')
+                    else:
+                        row_data.append('')
+                elif val_elem is not None and val_elem.text:
+                    if cell_type == 's':  # shared string reference
+                        idx = int(val_elem.text)
+                        row_data.append(shared_strings[idx] if idx < len(shared_strings) else '')
+                    else:
+                        row_data.append(val_elem.text)
+                else:
+                    row_data.append('')
+            if row_data:
+                rows.append(row_data)
+    
+    if len(rows) < 2:
+        return pd.DataFrame()
+    
+    # Pad rows to same length as header
+    n_cols = len(rows[0])
+    for i in range(1, len(rows)):
+        while len(rows[i]) < n_cols:
+            rows[i].append('')
+    
+    return pd.DataFrame(rows[1:], columns=rows[0])
+
 def process_seeking_alpha_exports() -> bool:
     """
     Scans ~/Downloads for Seeking Alpha Excel files (* YYYY-MM-DD.xlsx).
@@ -122,8 +181,12 @@ def process_seeking_alpha_exports() -> bool:
         print(f"Processing Seeking Alpha export: {os.path.basename(file_path)} (latest version: {latest_date})")
         
         try:
-            # Read excel file
-            df = pd.read_excel(file_path)
+            # Read xlsx directly as zip to bypass openpyxl conditional formatting parsing
+            df = _read_xlsx_data_only(file_path)
+            if df.empty:
+                print(f"Warning: Seeking Alpha export '{os.path.basename(file_path)}' has no data rows. Skipping.", file=sys.stderr)
+                success = False
+                continue
             
             if 'Symbol' not in df.columns:
                 print(f"Warning: 'Symbol' column not found in Seeking Alpha export '{os.path.basename(file_path)}'. Skipping.", file=sys.stderr)
@@ -240,9 +303,21 @@ def process_fidelity_export(file_path: str):
         
     # 2. Read CSV with index_col=False
     try:
-        df = pd.read_csv(file_path, index_col=False)
+        df = pd.read_csv(file_path, index_col=False, encoding='utf-8-sig')
     except Exception as e:
         raise RuntimeError(f"Error reading CSV file '{file_path}': {e}")
+    
+    # 3. Normalize column names (Fidelity changed from Title Case to lowercase)
+    column_mapping = {
+        'Account name': 'Account Name',
+        'Account number': 'Account Number',
+        'Current value': 'Current Value',
+        'Cost basis total': 'Cost Basis Total',
+        'Average cost basis': 'Average Cost Basis',
+        'Last price': 'Last Price',
+        'Percent of account': 'Percent Of Account',
+    }
+    df.rename(columns=column_mapping, inplace=True)
         
     # Write the account-specific CSVs to tickers/Holding/
     try:
@@ -280,10 +355,11 @@ def process_fidelity_export(file_path: str):
             pct_acct
         ))
         
-    # 6. Insert/Replace rows in SQLite DB
+    # 6. Clear existing positions and insert new rows in SQLite DB
     try:
         with get_sqlite_conn() as conn:
             cursor = conn.cursor()
+            cursor.execute("DELETE FROM fidelity_positions")
             cursor.executemany("""
                 INSERT OR REPLACE INTO fidelity_positions (
                     date,
@@ -298,88 +374,57 @@ def process_fidelity_export(file_path: str):
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, rows_to_insert)
-        print(f"Successfully inserted/updated {len(rows_to_insert)} records into SQLite fidelity_positions table for date {date_str}.")
+        print(f"Successfully inserted {len(rows_to_insert)} records into SQLite fidelity_positions table for date {date_str}.")
     except Exception as e:
         raise RuntimeError(f"Error inserting into SQLite: {e}")
 
 def compare_holdings_and_write_mismatches(project_root: str):
     """
     Compares 'Current <Category>.csv' with '<Category>.csv' inside tickers/Holding.
-    Writes the mismatches report to ~/Downloads/mismatches.txt.
+    Prints tickers only in Current (not in Holding) and only in Holding (not in Current).
     """
     holding_dir = os.path.join(project_root, 'tickers', 'Holding')
     if not os.path.exists(holding_dir):
         print(f"Holding directory not found: {holding_dir}")
         return
         
-    # Find all 'Current *.csv' files
-    current_files = glob.glob(os.path.join(holding_dir, 'Current *.csv'))
-    
-    report_lines = []
-    report_lines.append(f"Mismatches Report - Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    report_lines.append("=" * 60)
-    report_lines.append("")
-    
-    mismatch_found = False
-    
-    # Helper function to read symbols from a csv
     def read_symbols(path: str) -> set:
         try:
             df = pd.read_csv(path)
             if 'Symbol' in df.columns:
                 return set(df['Symbol'].dropna().astype(str).str.strip().str.upper())
         except Exception as e:
-            print(f"Error reading symbols from {path}: {e}", file=sys.stderr)
+            print(f"Error reading {path}: {e}", file=sys.stderr)
         return set()
 
+    current_files = glob.glob(os.path.join(holding_dir, 'Current *.csv'))
+    mismatch_found = False
+    
     for current_file in sorted(current_files):
-        base_filename = os.path.basename(current_file)
-        # e.g., 'Current Stocks.csv' -> 'Stocks.csv'
-        category = base_filename[len('Current '):]
+        base = os.path.basename(current_file)
+        category = base[len('Current '):]
+        category_name = os.path.splitext(category)[0]
         target_file = os.path.join(holding_dir, category)
         
-        category_name = os.path.splitext(category)[0]
-        
         if not os.path.exists(target_file):
-            # No corresponding Fidelity file
             continue
             
         current_symbols = read_symbols(current_file)
-        target_symbols = read_symbols(target_file)
+        holding_symbols = read_symbols(target_file)
         
-        only_in_current = sorted(list(current_symbols - target_symbols))
-        only_in_target = sorted(list(target_symbols - current_symbols))
+        in_current_not_holding = sorted(current_symbols - holding_symbols)
+        in_holding_not_current = sorted(holding_symbols - current_symbols)
         
-        if only_in_current or only_in_target:
+        if in_current_not_holding or in_holding_not_current:
             mismatch_found = True
-            report_lines.append(f"Category: {category_name}")
-            report_lines.append("-" * len(f"Category: {category_name}"))
-            
-            if only_in_current:
-                report_lines.append(f"  Only in 'Current {category_name}' (Seeking Alpha) [{len(only_in_current)} symbols]:")
-                report_lines.append("    " + ", ".join(only_in_current))
-                
-            if only_in_target:
-                report_lines.append(f"  Only in '{category_name}' (Fidelity) [{len(only_in_target)} symbols]:")
-                report_lines.append("    " + ", ".join(only_in_target))
-                
-            report_lines.append("")
+            print(f"\n{category_name}:")
+            if in_current_not_holding:
+                print(f"  In Current but not Holding ({len(in_current_not_holding)}): {', '.join(in_current_not_holding)}")
+            if in_holding_not_current:
+                print(f"  In Holding but not Current ({len(in_holding_not_current)}): {', '.join(in_holding_not_current)}")
             
     if not mismatch_found:
-        report_lines.append("All categories match perfectly. No mismatches found!")
-        report_lines.append("")
-        
-    # Write report to ~/Downloads/mismatches.txt
-    downloads_dir = os.path.expanduser('~/Downloads')
-    report_path = os.path.join(downloads_dir, 'mismatches.txt')
-    
-    try:
-        os.makedirs(downloads_dir, exist_ok=True)
-        with open(report_path, 'w') as f:
-            f.write("\n".join(report_lines))
-        print(f"Successfully wrote mismatches report to {report_path}")
-    except Exception as e:
-        print(f"Error writing mismatches report to {report_path}: {e}", file=sys.stderr)
+        print("All categories match. No differences found.")
 
 def update_holding_portfolios_from_file():
     """

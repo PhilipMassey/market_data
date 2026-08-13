@@ -413,7 +413,7 @@
                                         <th data-sort="over_pc" class="sortable text-right">Return % <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="pc_mean" class="sortable text-right">Mean Return % <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="pc_std" class="sortable text-right">Volatility % <i class="fa-solid fa-sort"></i></th>
-                                        <th data-sort="prob_green_day_rank" class="sortable text-right">Prob Green <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="rel_strength_ind_rank" class="sortable text-right">Rel Strength <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="stretch_score_rank" class="sortable text-right">Stretch <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="kelly_fraction_rank" class="sortable text-right">Kelly <i class="fa-solid fa-sort"></i></th>
                                     </tr>
@@ -445,9 +445,25 @@
                             </button>
                         </div>
                         <div class="detail-body">
-                            <h4>Performance Across All Periods</h4>
-                            <div class="detail-periods-grid" id="detail-periods-container">
-                                <!-- Injected by JS -->
+                            <div class="table-container">
+                                <table id="detail-periods-table" class="detail-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>Date Range</th>
+                                            <th class="text-right">Rank</th>
+                                            <th class="text-right">Return %</th>
+                                            <th class="text-right">Mean Return %</th>
+                                            <th class="text-right">Volatility %</th>
+                                            <th class="text-right">Rel Strength</th>
+                                            <th class="text-right">Stretch</th>
+                                            <th class="text-right">Kelly</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="detail-periods-container">
+                                        <!-- Injected by JS -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

@@ -1,0 +1,5 @@
+# Pyrefly type checker configuration
+# https://pyrefly.org/en/docs/configuration/
+
+project-includes = ["."]
+project-excludes = [".venv", "__pycache__", ".git", ".pytest_cache"]
