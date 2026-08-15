@@ -40,6 +40,16 @@
                 "PYTHONPATH": "${workspaceFolder}",
                 "RAPID_API_KEY": "${env:RAPID_API_KEY}"
             }
+        },
+        {
+            "name": "Run: Delete Orphan Profiles",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/database/delete_orphan_profiles.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }

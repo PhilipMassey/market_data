@@ -327,3 +327,33 @@ def test_api_compare_hybrid_date_resolution(mock_sqlite_db):
     assert totals['end_value'] == 3300.0
     assert totals['change_dollar'] == 900.0
 
+
+@patch('portfolio.portfolio_dashboard.get_all_periods_ranked')
+def test_api_ticker_ranks_sector_and_industry_filter(mock_get_ranked, mock_sqlite_db):
+    import pandas as pd
+    rows = []
+    for period in ['1 Month', '3 Month', '6 Month', '1 Year']:
+        rows.extend([
+            {'ticker': 'AAPL', 'sector': 'Technology', 'industry': 'Consumer Electronics', 'Period': period, 'risk_reward_rank': 1},
+            {'ticker': 'MSFT', 'sector': 'Technology', 'industry': 'Software - Infrastructure', 'Period': period, 'risk_reward_rank': 2},
+            {'ticker': 'JPM', 'sector': 'Financial', 'industry': 'Banks - Diversified', 'Period': period, 'risk_reward_rank': 3},
+        ])
+    mock_get_ranked.return_value = pd.DataFrame(rows)
+
+    client = app.test_client()
+    
+    # 1. Filter by Sector only
+    resp = client.get('/data/ticker-ranks?period=1%20Month&sector=Technology')
+    assert resp.status_code == 200
+    tickers = [r['ticker'] for r in resp.json]
+    assert set(tickers) == {'AAPL', 'MSFT'}
+
+    # 2. Filter by Sector AND Industry
+    resp = client.get('/data/ticker-ranks?period=1%20Month&sector=Technology&industry=Consumer%20Electronics')
+    assert resp.status_code == 200
+    tickers = [r['ticker'] for r in resp.json]
+    assert tickers == ['AAPL']
+
+
+
+

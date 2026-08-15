@@ -402,9 +402,9 @@ def api_ticker_ranks():
         
     df_period = df_all[df_all['Period'] == period]
     
-    if sector and not industry:
+    if sector:
         df_period = df_period[df_period['sector'] == sector]
-    elif sector and industry:
+    if industry:
         df_period = df_period[df_period['industry'] == industry]
         
     df_period = df_period.sort_values(by=['risk_reward_rank', 'sector', 'industry', 'ticker'])

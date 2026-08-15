@@ -429,9 +429,9 @@ def filter_by_sector_industry(df_all, sector, industry):
     Returns:
         pd.DataFrame: Filtered dataframe
     """
-    if sector is not None and industry is None:
+    if sector is not None and sector != '':
         df_all = df_all[df_all['sector'] == sector]
-    elif sector is not None and industry is not None:
+    if industry is not None and industry != '':
         df_all = df_all[df_all['industry'] == industry]
     return df_all
 

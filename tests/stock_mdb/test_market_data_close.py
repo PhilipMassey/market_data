@@ -142,8 +142,8 @@ def test_download_and_insert_missing_close_prices_success(
         index=pd.to_datetime(["2026-05-19", "2026-05-20"])
     )
     def download_side_effect(tickers, start, end, progress=False):
-        ticker = tickers[0]
-        return MockYFData(close_df[[ticker]])
+        valid_cols = [t for t in tickers if t in close_df.columns]
+        return MockYFData(close_df[valid_cols])
     mock_yf_download.side_effect = download_side_effect
     
     # 3. Call the target function
@@ -154,10 +154,9 @@ def test_download_and_insert_missing_close_prices_success(
     mock_get_all_tickers.assert_called_once()
     
     from unittest.mock import call
-    mock_yf_download.assert_has_calls([
-        call(["AAPL"], start="2026-05-19", end="2026-05-21", progress=False),
-        call(["MSFT"], start="2026-05-19", end="2026-05-21", progress=False)
-    ], any_order=True)
+    mock_yf_download.assert_called_once_with(
+        ["AAPL", "MSFT"], start="2026-05-19", end="2026-05-21", progress=False
+    )
     
     # 5. Verify records were inserted in SQLite DB
     cursor = mock_sqlite_conn.cursor()
