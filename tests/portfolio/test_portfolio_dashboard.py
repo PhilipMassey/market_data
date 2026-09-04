@@ -42,6 +42,19 @@ def mock_sqlite_db():
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ticker_meta_profile (
+            ticker TEXT PRIMARY KEY NOT NULL,
+            company_name TEXT,
+            type TEXT,
+            sector TEXT,
+            industry TEXT
+        )
+    """)
+    
+    # Insert ticker meta profile
+    cursor.execute("INSERT INTO ticker_meta_profile VALUES ('AAPL', 'Apple Inc.', 'EQUITY', 'Technology', 'Consumer Electronics')")
+    
     # Insert dummy fidelity positions (snapshot date: 2026-06-07 and 2026-06-01)
     cursor.executemany("""
         INSERT INTO fidelity_positions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -202,6 +215,31 @@ def test_api_compare_route(mock_sqlite_db):
         assert mm['end_value'] == 1800.0
         assert mm['change_dollar'] == 0.0
         assert mm['change_percent'] == 0.0
+        assert mm['sector'] == 'Cash'
+        assert mm['industry'] == 'Cash'
+
+        # Verify industry totals
+        ind_totals = data['industry_totals']
+        assert len(ind_totals) == 2
+        tech_ind = next(i for i in ind_totals if i['industry'] == 'Consumer Electronics')
+        assert tech_ind['sector'] == 'Technology'
+        assert tech_ind['symbols'] == ['AAPL']
+        assert tech_ind['symbol_count'] == 1
+        assert tech_ind['start_value'] == 1400.0
+        assert tech_ind['end_value'] == 1440.0
+        assert tech_ind['change_dollar'] == 40.0
+        assert tech_ind['change_percent'] == pytest.approx(2.8571, abs=1e-3)
+        assert tech_ind['weight_percent'] == pytest.approx(1440.0 / 3240.0 * 100, abs=1e-3)
+
+        # Verify sector totals
+        sec_totals = data['sector_totals']
+        assert len(sec_totals) == 2
+        tech_sec = next(s for s in sec_totals if s['sector'] == 'Technology')
+        assert tech_sec['industry_count'] == 1
+        assert tech_sec['symbol_count'] == 1
+        assert tech_sec['start_value'] == 1400.0
+        assert tech_sec['end_value'] == 1440.0
+        assert tech_sec['change_dollar'] == 40.0
 
 def test_api_compare_route_defaults(mock_sqlite_db):
     # Test that compare endpoint falls back to defaults if no dates provided
@@ -353,6 +391,51 @@ def test_api_ticker_ranks_sector_and_industry_filter(mock_get_ranked, mock_sqlit
     assert resp.status_code == 200
     tickers = [r['ticker'] for r in resp.json]
     assert tickers == ['AAPL']
+
+
+def test_api_compare_filters(mock_sqlite_db):
+    client = app.test_client()
+    
+    # 1. Filter comparison by sector=Technology
+    resp = client.get('/data/compare?start_date=2026-06-01&end_date=2026-06-07&sector=Technology')
+    assert resp.status_code == 200
+    data = resp.json
+    # Only AAPL should remain (Cash / Money Market filtered out)
+    assert len(data['positions']) == 1
+    assert data['positions'][0]['symbol'] == 'AAPL'
+    assert data['totals']['start_value'] == 1400.0
+    assert data['totals']['end_value'] == 1440.0
+    assert data['totals']['change_dollar'] == 40.0
+    assert len(data['industry_totals']) == 1
+    assert data['industry_totals'][0]['industry'] == 'Consumer Electronics'
+    assert len(data['sector_totals']) == 1
+    assert data['sector_totals'][0]['sector'] == 'Technology'
+
+    # 2. Filter comparison by directory / portfolio
+    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers:
+        mock_get_tickers.return_value = ['AAPL']
+        resp = client.get('/data/compare?start_date=2026-06-01&end_date=2026-06-07&directory=Holding&portfolio=MyPortfolio')
+        assert resp.status_code == 200
+        data = resp.json
+        assert len(data['positions']) == 1
+        assert data['positions'][0]['symbol'] == 'AAPL'
+
+
+def test_api_ticker_ranks_options_filtering(mock_sqlite_db):
+    client = app.test_client()
+    
+    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers:
+        # Mock folder containing only AAPL (Technology)
+        mock_get_tickers.return_value = ['AAPL']
+        resp = client.get('/data/ticker-ranks/options?directory=Holding&portfolio=TechOnly')
+        assert resp.status_code == 200
+        data = resp.json
+        assert 'sectors_industries' in data
+        assert 'Technology' in data['sectors_industries']
+        # Financials / Healthcare should not be in sectors_industries because TechOnly has only AAPL
+        assert 'Financials' not in data['sectors_industries']
+
+
 
 
 

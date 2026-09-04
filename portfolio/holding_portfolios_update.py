@@ -378,53 +378,30 @@ def process_fidelity_export(file_path: str):
     except Exception as e:
         raise RuntimeError(f"Error inserting into SQLite: {e}")
 
-def compare_holdings_and_write_mismatches(project_root: str):
+def compare_holdings_and_write_mismatches(project_root: str = None):
     """
-    Compares 'Current <Category>.csv' with '<Category>.csv' inside tickers/Holding.
-    Prints tickers only in Current (not in Holding) and only in Holding (not in Current).
+    Compares symbols in 'Current <Port>' and 'Current Others' (Seeking Alpha exports)
+    against symbols in the Holding directory (Fidelity exports).
+    Prints fidelity extras and seeking extras.
     """
-    holding_dir = os.path.join(project_root, 'tickers', 'Holding')
-    if not os.path.exists(holding_dir):
-        print(f"Holding directory not found: {holding_dir}")
-        return
-        
-    def read_symbols(path: str) -> set:
-        try:
-            df = pd.read_csv(path)
-            if 'Symbol' in df.columns:
-                return set(df['Symbol'].dropna().astype(str).str.strip().str.upper())
-        except Exception as e:
-            print(f"Error reading {path}: {e}", file=sys.stderr)
-        return set()
+    from utils.ticker_reader import get_tickers, get_tickers_from_directory
 
-    current_files = glob.glob(os.path.join(holding_dir, 'Current *.csv'))
-    mismatch_found = False
-    
-    for current_file in sorted(current_files):
-        base = os.path.basename(current_file)
-        category = base[len('Current '):]
-        category_name = os.path.splitext(category)[0]
-        target_file = os.path.join(holding_dir, category)
-        
-        if not os.path.exists(target_file):
-            continue
-            
-        current_symbols = read_symbols(current_file)
-        holding_symbols = read_symbols(target_file)
-        
-        in_current_not_holding = sorted(current_symbols - holding_symbols)
-        in_holding_not_current = sorted(holding_symbols - current_symbols)
-        
-        if in_current_not_holding or in_holding_not_current:
-            mismatch_found = True
-            print(f"\n{category_name}:")
-            if in_current_not_holding:
-                print(f"  In Current but not Holding ({len(in_current_not_holding)}): {', '.join(in_current_not_holding)}")
-            if in_holding_not_current:
-                print(f"  In Holding but not Current ({len(in_holding_not_current)}): {', '.join(in_holding_not_current)}")
-            
-    if not mismatch_found:
-        print("All categories match. No differences found.")
+    portfolios = ['Dividends', 'ETFs', 'International', 'Stocks']
+    holding_dir = 'Holding'
+
+    seeking_symbols = []
+    for port in portfolios:
+        seeking_symbols.extend(get_tickers(holding_dir, 'Current ' + port))
+    seeking_symbols = set(seeking_symbols)
+
+    fidelity_symbols = []
+    for port in portfolios:
+        fidelity_symbols.extend(get_tickers(holding_dir, port))
+    fidelity_symbols = set(fidelity_symbols)
+
+    # fidelity_symbols = set(get_tickers_from_directory(holding_dir))
+    print('fidelity extras ', fidelity_symbols.difference(seeking_symbols))
+    print('seeking extras ', seeking_symbols.difference(fidelity_symbols))
 
 def update_holding_portfolios_from_file():
     """

@@ -290,49 +290,61 @@ def test_process_seeking_alpha_exports_missing_symbol_column(tmp_path):
         div_csv = holding_dir / "Current Dividends.csv"
         assert not div_csv.exists()
 
-def test_compare_holdings_and_write_mismatches_with_differences(tmp_path):
-    holding_dir = tmp_path / "tickers" / "Holding"
-    holding_dir.mkdir(parents=True)
-    
-    # Current Stocks: AAPL, GOOG, MSFT
-    # Stocks: AAPL, MSFT, TSLA
-    # Mismatch: GOOG only in Current, TSLA only in Holding
-    pd.DataFrame({'Symbol': ['AAPL', 'GOOG', 'MSFT']}).to_csv(holding_dir / "Current Stocks.csv", index=False)
-    pd.DataFrame({'Symbol': ['AAPL', 'MSFT', 'TSLA']}).to_csv(holding_dir / "Stocks.csv", index=False)
-    
-    # Current ETFs: QQQ, SPY — perfect match
-    pd.DataFrame({'Symbol': ['QQQ', 'SPY']}).to_csv(holding_dir / "Current ETFs.csv", index=False)
-    pd.DataFrame({'Symbol': ['QQQ', 'SPY']}).to_csv(holding_dir / "ETFs.csv", index=False)
-    
+def test_compare_holdings_and_write_mismatches_with_differences():
     import io
     from contextlib import redirect_stdout
-    
-    f = io.StringIO()
-    with redirect_stdout(f):
-        compare_holdings_and_write_mismatches(str(tmp_path))
-    
-    output = f.getvalue()
-    assert "Stocks:" in output
-    assert "In Current but not Holding" in output
-    assert "GOOG" in output
-    assert "In Holding but not Current" in output
-    assert "TSLA" in output
-    assert "ETFs:" not in output  # Matching categories shouldn't appear
+    from unittest.mock import patch
 
-def test_compare_holdings_and_write_mismatches_perfect_match(tmp_path):
-    holding_dir = tmp_path / "tickers" / "Holding"
-    holding_dir.mkdir(parents=True)
-    
-    pd.DataFrame({'Symbol': ['AAPL']}).to_csv(holding_dir / "Current Stocks.csv", index=False)
-    pd.DataFrame({'Symbol': ['AAPL']}).to_csv(holding_dir / "Stocks.csv", index=False)
-    
+    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers, \
+         patch('utils.ticker_reader.get_tickers_from_directory') as mock_get_dir:
+        
+        # When called for ('Holding', 'Current Stocks') -> ['AAPL', 'GOOG']
+        # When called for ('Holding', 'Current Others') -> ['MSFT']
+        # Total seeking_symbols = {'AAPL', 'GOOG', 'MSFT'}
+        def side_effect(folder, port=None):
+            if port == 'Current Stocks':
+                return ['AAPL', 'GOOG']
+            if port == 'Current Others':
+                return ['MSFT']
+            return []
+        
+        mock_get_tickers.side_effect = side_effect
+        # fidelity_symbols = {'AAPL', 'MSFT', 'TSLA'}
+        mock_get_dir.return_value = ['AAPL', 'MSFT', 'TSLA']
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            compare_holdings_and_write_mismatches()
+
+        output = f.getvalue()
+        assert "fidelity extras" in output
+        assert "'TSLA'" in output
+        assert "seeking extras" in output
+        assert "'GOOG'" in output
+
+
+def test_compare_holdings_and_write_mismatches_perfect_match():
     import io
     from contextlib import redirect_stdout
-    
-    f = io.StringIO()
-    with redirect_stdout(f):
-        compare_holdings_and_write_mismatches(str(tmp_path))
-    
-    output = f.getvalue()
-    assert "All categories match. No differences found." in output
+    from unittest.mock import patch
+
+    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers, \
+         patch('utils.ticker_reader.get_tickers_from_directory') as mock_get_dir:
+        
+        def side_effect(folder, port=None):
+            if port == 'Current Stocks':
+                return ['AAPL']
+            return []
+        
+        mock_get_tickers.side_effect = side_effect
+        mock_get_dir.return_value = ['AAPL']
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            compare_holdings_and_write_mismatches()
+
+        output = f.getvalue()
+        assert "fidelity extras  set()" in output
+        assert "seeking extras  set()" in output
+
 

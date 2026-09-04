@@ -211,6 +211,10 @@ def api_compare():
     init_sqlite_db()
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    filter_directory = request.args.get('directory')
+    filter_portfolio = request.args.get('portfolio')
+    filter_sector = request.args.get('sector')
+    filter_industry = request.args.get('industry')
     
     business_days = get_nyse_business_days_comparison()
     
@@ -236,19 +240,17 @@ def api_compare():
     start_portfolio = fetch_portfolio_at_date(start_date)
     end_portfolio = fetch_portfolio_at_date(end_date)
     
-    start_value = sum(p['dynamic_value'] for p in start_portfolio.values() if p['dynamic_value'] is not None)
-    end_value = sum(p['dynamic_value'] for p in end_portfolio.values() if p['dynamic_value'] is not None)
-    
-    change_dollar = end_value - start_value
-    change_percent = (change_dollar / start_value * 100) if start_value > 0.0 else 0.0
-    
-    totals = {
-        'start_value': start_value,
-        'end_value': end_value,
-        'change_dollar': change_dollar,
-        'change_percent': change_percent
-    }
-    
+    # Lookup sector & industry metadata from ticker_meta_profile
+    meta_map = {}
+    with get_sqlite_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT ticker, sector, industry FROM ticker_meta_profile")
+        for row in cursor.fetchall():
+            meta_map[row[0].upper()] = {
+                'sector': row[1] or 'Unknown',
+                'industry': row[2] or 'Unknown'
+            }
+
     compare_positions = []
     common_symbols = set(start_portfolio.keys()).intersection(set(end_portfolio.keys()))
     
@@ -262,15 +264,20 @@ def api_compare():
         if s_val == 0.0 or e_val == 0.0:
             continue
             
-        if is_cash(symbol):
+        if is_cash(symbol) or symbol == 'Money Market':
             c_dollar = 0.0
             c_percent = 0.0
+            sector = 'Cash'
+            industry = 'Cash'
         else:
             s_price = start_pos['current_price'] or 0.0
             e_price = end_pos['current_price'] or 0.0
             e_qty = end_pos['quantity'] or 0.0
             c_dollar = (e_price - s_price) * e_qty
             c_percent = ((e_price - s_price) / s_price * 100) if s_price > 0.0 else 0.0
+            meta = meta_map.get(symbol.upper(), {})
+            sector = meta.get('sector', 'Unknown')
+            industry = meta.get('industry', 'Unknown')
             
         s_qty = start_pos['quantity']
         e_qty = end_pos['quantity']
@@ -279,6 +286,8 @@ def api_compare():
         compare_positions.append({
             'symbol': symbol,
             'account_name': end_pos['account_name'] or start_pos['account_name'],
+            'sector': sector,
+            'industry': industry,
             'start_qty': s_qty,
             'end_qty': e_qty,
             'qty_change': qty_change,
@@ -287,11 +296,124 @@ def api_compare():
             'change_dollar': c_dollar,
             'change_percent': c_percent
         })
+
+    # Apply Directory / Portfolio Filter
+    if filter_directory or filter_portfolio:
+        from utils.ticker_reader import get_tickers
+        allowed_tickers = {t.upper() for t in get_tickers(filter_directory or 'ALL_FOLDERS', filter_portfolio if filter_portfolio else None)}
+        compare_positions = [p for p in compare_positions if p['symbol'].upper() in allowed_tickers]
+
+    # Apply Sector Filter
+    if filter_sector:
+        compare_positions = [p for p in compare_positions if p['sector'] == filter_sector]
+
+    # Apply Industry Filter
+    if filter_industry:
+        compare_positions = [p for p in compare_positions if p['industry'] == filter_industry]
+
+    # Calculate totals
+    if filter_directory or filter_portfolio or filter_sector or filter_industry:
+        start_value = sum(p['start_value'] for p in compare_positions)
+        end_value = sum(p['end_value'] for p in compare_positions)
+    else:
+        start_value = sum(p['dynamic_value'] for p in start_portfolio.values() if p['dynamic_value'] is not None)
+        end_value = sum(p['dynamic_value'] for p in end_portfolio.values() if p['dynamic_value'] is not None)
+
+    change_dollar = end_value - start_value
+    change_percent = (change_dollar / start_value * 100) if start_value > 0.0 else 0.0
+
+    totals = {
+        'start_value': start_value,
+        'end_value': end_value,
+        'change_dollar': change_dollar,
+        'change_percent': change_percent
+    }
+
+    # Aggregate Industry Totals
+    industry_groups = {}
+    for pos in compare_positions:
+        key = (pos['sector'], pos['industry'])
+        if key not in industry_groups:
+            industry_groups[key] = {
+                'sector': pos['sector'],
+                'industry': pos['industry'],
+                'start_value': 0.0,
+                'end_value': 0.0,
+                'change_dollar': 0.0,
+                'symbols': []
+            }
+        g = industry_groups[key]
+        g['start_value'] += pos['start_value']
+        g['end_value'] += pos['end_value']
+        g['change_dollar'] += pos['change_dollar']
+        g['symbols'].append(pos['symbol'])
+
+    industry_totals = []
+    for g in industry_groups.values():
+        s_val = g['start_value']
+        e_val = g['end_value']
+        c_dollar = g['change_dollar']
+        c_pct = (c_dollar / s_val * 100) if s_val > 0.0 else 0.0
+        weight_pct = (e_val / end_value * 100) if end_value > 0.0 else 0.0
+        industry_totals.append({
+            'sector': g['sector'],
+            'industry': g['industry'],
+            'symbols': sorted(list(set(g['symbols']))),
+            'symbol_count': len(set(g['symbols'])),
+            'start_value': s_val,
+            'end_value': e_val,
+            'change_dollar': c_dollar,
+            'change_percent': c_pct,
+            'weight_percent': weight_pct
+        })
+    industry_totals.sort(key=lambda x: x['end_value'], reverse=True)
+
+    # Aggregate Sector Totals
+    sector_groups = {}
+    for pos in compare_positions:
+        sec = pos['sector']
+        if sec not in sector_groups:
+            sector_groups[sec] = {
+                'sector': sec,
+                'start_value': 0.0,
+                'end_value': 0.0,
+                'change_dollar': 0.0,
+                'industries': set(),
+                'symbols': []
+            }
+        g = sector_groups[sec]
+        g['start_value'] += pos['start_value']
+        g['end_value'] += pos['end_value']
+        g['change_dollar'] += pos['change_dollar']
+        g['industries'].add(pos['industry'])
+        g['symbols'].append(pos['symbol'])
+
+    sector_totals = []
+    for g in sector_groups.values():
+        s_val = g['start_value']
+        e_val = g['end_value']
+        c_dollar = g['change_dollar']
+        c_pct = (c_dollar / s_val * 100) if s_val > 0.0 else 0.0
+        weight_pct = (e_val / end_value * 100) if end_value > 0.0 else 0.0
+        sector_totals.append({
+            'sector': g['sector'],
+            'industry_count': len(g['industries']),
+            'symbols': sorted(list(set(g['symbols']))),
+            'symbol_count': len(set(g['symbols'])),
+            'start_value': s_val,
+            'end_value': e_val,
+            'change_dollar': c_dollar,
+            'change_percent': c_pct,
+            'weight_percent': weight_pct
+        })
+    sector_totals.sort(key=lambda x: x['end_value'], reverse=True)
         
     return jsonify({
         'start_date': start_date,
         'end_date': end_date,
         'positions': compare_positions,
+        'industry_totals': industry_totals,
+        'sector_totals': sector_totals,
         'totals': totals
     })
 
@@ -344,22 +466,46 @@ def get_symbols_for_dir_and_port(directory: str, portfolio: str = None) -> list:
 def api_ticker_ranks_options():
     init_sqlite_db()
     
+    directory = request.args.get('directory')
+    portfolio = request.args.get('portfolio')
+    
+    if directory or portfolio:
+        from utils.ticker_reader import get_tickers
+        active_tickers = get_tickers(directory or 'ALL_FOLDERS', portfolio if portfolio else None)
+    else:
+        from utils.ticker_reader import get_tickers_from_directory
+        active_tickers = get_tickers_from_directory('ALL_FOLDERS')
+        
+    active_tickers = [t.upper() for t in active_tickers if t]
+    
     sectors_industries = {}
     with get_sqlite_conn() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT DISTINCT sector, industry 
-            FROM ticker_meta_profile 
-            WHERE sector IS NOT NULL AND industry IS NOT NULL
-        """)
+        if active_tickers:
+            placeholders = ','.join(['?'] * len(active_tickers))
+            cursor.execute(f"""
+                SELECT DISTINCT sector, industry 
+                FROM ticker_meta_profile 
+                WHERE ticker IN ({placeholders}) 
+                  AND sector IS NOT NULL AND industry IS NOT NULL
+            """, active_tickers)
+        else:
+            cursor.execute("""
+                SELECT DISTINCT sector, industry 
+                FROM ticker_meta_profile 
+                WHERE sector IS NOT NULL AND industry IS NOT NULL
+            """)
+            
         for row in cursor.fetchall():
             sec, ind = row
+            if not sec or sec == 'Unknown':
+                continue
             if sec not in sectors_industries:
                 sectors_industries[sec] = []
-            if ind not in sectors_industries[sec]:
+            if ind and ind != 'Unknown' and ind not in sectors_industries[sec]:
                 sectors_industries[sec].append(ind)
                 
-    sorted_sectors_industries = {sec: sorted(inds) for sec, inds in sorted(sectors_industries.items())}
+    sorted_sectors_industries = {sec: sorted(inds) for sec, inds in sorted(sectors_industries.items()) if inds or sec}
     
     directories = get_portfolio_dirs()
     dirs_portfolios = {d: get_portfolios_in_dir(d) for d in directories}

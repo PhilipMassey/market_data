@@ -50,6 +50,26 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
+        },
+        {
+            "name": "Run: Sync Metadata from Google Sheet",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/database/sync_ticker_metadata_from_sheet.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Run: Compare Current and SA",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/portfolio/compare_current_and_sa.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }

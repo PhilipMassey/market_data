@@ -303,6 +303,11 @@ body {
     display: none;
 }
 
+/* Global Hidden Utility */
+.hidden {
+    display: none !important;
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -576,6 +581,13 @@ body {
 
 .toolbar-left {
     display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.toolbar-title-group {
+    display: flex;
     align-items: baseline;
     gap: 0.75rem;
 }
@@ -587,6 +599,41 @@ body {
 
 .toolbar-left span {
     font-size: 0.8rem;
+}
+
+.view-mode-toggle {
+    display: inline-flex;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+}
+
+.btn-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-toggle:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-toggle.active {
+    background: #6366f1;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4);
 }
 
 .toolbar-right {
@@ -830,8 +877,30 @@ tbody tr:hover {
 }
 
 .badge-fid {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--color-warning);
+    background: rgba(234, 179, 8, 0.15);
+    color: #fef08a;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-sector {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.badge-count {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
 }
 
 /* App Footer */
@@ -844,7 +913,8 @@ tbody tr:hover {
     margin-top: auto;
 }
 
-/* Ticker Rankings Screen Styles */
+/* Selector Dropdowns */
+.selector-container select,
 .ranks-selectors select {
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--border-glass);
@@ -859,6 +929,7 @@ tbody tr:hover {
     transition: var(--transition-smooth);
 }
 
+.selector-container select:focus,
 .ranks-selectors select:focus {
     border-color: var(--color-primary);
     background: rgba(0, 0, 0, 0.4);

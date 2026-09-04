@@ -17,11 +17,24 @@ const state = {
     comparison: {
         rawPositions: [],
         filteredPositions: [],
+        rawIndustries: [],
+        filteredIndustries: [],
+        rawSectors: [],
+        filteredSectors: [],
         totals: {},
+        viewMode: 'positions', // 'positions', 'industry', 'sector'
+        directory: '',
+        portfolio: '',
+        sector: '',
+        industry: '',
         pageSize: 15,
         currentPage: 1,
         sortBy: 'change_dollar',
         sortDir: 'desc',
+        sortIndBy: 'change_dollar',
+        sortIndDir: 'desc',
+        sortSecBy: 'change_dollar',
+        sortSecDir: 'desc',
         searchQuery: ''
     },
     businessDays: [],
@@ -127,6 +140,10 @@ function initTabs() {
         // Lazy load snapshot dates if not loaded
         if (!state.snapshotDates || state.snapshotDates.length === 0) {
             loadSnapshotDates();
+        }
+        // Lazy load options for comparison filters if not loaded
+        if (!state.ranks.optionsLoaded) {
+            loadRanksOptions();
         }
     });
 
@@ -590,14 +607,24 @@ async function loadComparisonData() {
     
     showLoading(true);
     try {
-        const url = `/data/compare?start_date=${startDate}&end_date=${endDate}`;
+        let url = `/data/compare?start_date=${startDate}&end_date=${endDate}`;
+        if (state.comparison.directory) url += `&directory=${encodeURIComponent(state.comparison.directory)}`;
+        if (state.comparison.portfolio) url += `&portfolio=${encodeURIComponent(state.comparison.portfolio)}`;
+        if (state.comparison.sector) url += `&sector=${encodeURIComponent(state.comparison.sector)}`;
+        if (state.comparison.industry) url += `&industry=${encodeURIComponent(state.comparison.industry)}`;
+
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch comparison data');
         const data = await res.json();
         
-        state.comparison.rawPositions = data.positions;
-        state.comparison.totals = data.totals;
+        state.comparison.rawPositions = data.positions || [];
+        state.comparison.rawIndustries = data.industry_totals || [];
+        state.comparison.rawSectors = data.sector_totals || [];
+        state.comparison.totals = data.totals || {};
         
+        // Update available sector and industry options based on comparison data
+        updateComparisonSectorOptions(data);
+
         // Render comparison dashboard
         renderComparisonDashboard(data.start_date, data.end_date);
     } catch (err) {
@@ -646,6 +673,17 @@ function renderComparisonDashboard(startDate, endDate) {
 
 // Comparison Table Processing
 function filterAndRenderComparisonTable() {
+    const viewMode = state.comparison.viewMode || 'positions';
+    
+    if (viewMode === 'industry') {
+        renderIndustryComparisonTable();
+        return;
+    } else if (viewMode === 'sector') {
+        renderSectorComparisonTable();
+        return;
+    }
+    
+    // Positions View (Default)
     let list = [...state.comparison.rawPositions];
     
     // 1. Search Query
@@ -653,8 +691,10 @@ function filterAndRenderComparisonTable() {
     if (query !== '') {
         list = list.filter(pos => {
             const sym = (pos.symbol || '').toLowerCase();
+            const sec = (pos.sector || '').toLowerCase();
+            const ind = (pos.industry || '').toLowerCase();
             const acc = (pos.account_name || '').toLowerCase();
-            return sym.includes(query) || acc.includes(query);
+            return sym.includes(query) || sec.includes(query) || ind.includes(query) || acc.includes(query);
         });
     }
     
@@ -717,7 +757,7 @@ function filterAndRenderComparisonTable() {
     tbody.innerHTML = '';
     
     if (paginatedList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">No matching positions found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 2rem;">No matching positions found.</td></tr>';
         renderPaginationControls('comparison');
         return;
     }
@@ -745,12 +785,201 @@ function filterAndRenderComparisonTable() {
         
         tr.innerHTML = `
             <td class="text-bold">${pos.symbol}</td>
-            <td><span class="text-muted">${pos.account_name || '-'}</span></td>
+            <td><span class="badge-sector">${pos.sector || 'Unknown'}</span></td>
+            <td><span class="text-muted">${pos.industry || 'Unknown'}</span></td>
             <td class="text-right ${qtyChangeClass}">${qtyChangeStr}</td>
             <td class="text-right">${formatCurrency(pos.start_value)}</td>
             <td class="text-right">${formatCurrency(pos.end_value)}</td>
             <td class="text-right ${changeClass} text-bold">${isCashPos ? '-' : formatCurrency(pos.change_dollar)}</td>
             <td class="text-right ${changeClass} text-bold">${isCashPos ? '-' : formatPercent(pos.change_percent)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    renderPaginationControls('comparison');
+}
+
+// Industry Comparison Table Processing
+function renderIndustryComparisonTable() {
+    let list = [...(state.comparison.rawIndustries || [])];
+    
+    // 1. Search Query
+    const query = state.comparison.searchQuery.toLowerCase().trim();
+    if (query !== '') {
+        list = list.filter(item => {
+            const ind = (item.industry || '').toLowerCase();
+            const sec = (item.sector || '').toLowerCase();
+            const syms = (item.symbols || []).join(' ').toLowerCase();
+            return ind.includes(query) || sec.includes(query) || syms.includes(query);
+        });
+    }
+    
+    // 2. Sorting
+    const sortBy = state.comparison.sortIndBy || 'change_dollar';
+    const dir = state.comparison.sortIndDir === 'asc' ? 1 : -1;
+    
+    list.sort((a, b) => {
+        let valA = a[sortBy];
+        let valB = b[sortBy];
+        
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+        
+        if (typeof valA === 'string') {
+            return valA.localeCompare(valB) * dir;
+        }
+        return (valA - valB) * dir;
+    });
+    
+    state.comparison.filteredPositions = list;
+    
+    // Count Label
+    document.getElementById('comp-filtered-count').textContent = `(${list.length} industries)`;
+    
+    // 3. Paginate
+    const pageSize = state.comparison.pageSize;
+    const totalEntries = list.length;
+    let paginatedList = [];
+    
+    if (pageSize === 'all') {
+        state.comparison.currentPage = 1;
+        paginatedList = list;
+        document.getElementById('comp-pag-start').textContent = totalEntries > 0 ? 1 : 0;
+        document.getElementById('comp-pag-end').textContent = totalEntries;
+    } else {
+        const limit = parseInt(pageSize);
+        const totalPages = Math.ceil(totalEntries / limit) || 1;
+        if (state.comparison.currentPage > totalPages) state.comparison.currentPage = totalPages;
+        if (state.comparison.currentPage < 1) state.comparison.currentPage = 1;
+        
+        const startIdx = (state.comparison.currentPage - 1) * limit;
+        const endIdx = Math.min(startIdx + limit, totalEntries);
+        paginatedList = list.slice(startIdx, endIdx);
+        
+        document.getElementById('comp-pag-start').textContent = totalEntries > 0 ? startIdx + 1 : 0;
+        document.getElementById('comp-pag-end').textContent = endIdx;
+    }
+    
+    document.getElementById('comp-pag-total').textContent = totalEntries;
+    
+    // 4. Render rows
+    const tbody = document.getElementById('comparison-industry-table-body');
+    tbody.innerHTML = '';
+    
+    if (paginatedList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 2rem;">No matching industries found.</td></tr>';
+        renderPaginationControls('comparison');
+        return;
+    }
+    
+    paginatedList.forEach(ind => {
+        const tr = document.createElement('tr');
+        const changeClass = ind.change_dollar >= 0 ? 'green-text' : 'red-text';
+        const isCash = ind.industry === 'Cash';
+        const tickersTooltip = (ind.symbols || []).join(', ');
+        
+        tr.innerHTML = `
+            <td class="text-bold">${ind.industry}</td>
+            <td><span class="badge-sector">${ind.sector || 'Unknown'}</span></td>
+            <td class="text-center" title="${tickersTooltip}">
+                <span class="badge-count">${ind.symbol_count}</span> <small class="text-muted">(${ind.symbols.slice(0, 3).join(', ')}${ind.symbols.length > 3 ? '...' : ''})</small>
+            </td>
+            <td class="text-right">${formatCurrency(ind.start_value)}</td>
+            <td class="text-right">${formatCurrency(ind.end_value)}</td>
+            <td class="text-right ${changeClass} text-bold">${isCash ? '-' : formatCurrency(ind.change_dollar)}</td>
+            <td class="text-right ${changeClass} text-bold">${isCash ? '-' : formatPercent(ind.change_percent)}</td>
+            <td class="text-right text-bold">${formatPercent(ind.weight_percent)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    renderPaginationControls('comparison');
+}
+
+// Sector Comparison Table Processing
+function renderSectorComparisonTable() {
+    let list = [...(state.comparison.rawSectors || [])];
+    
+    // 1. Search Query
+    const query = state.comparison.searchQuery.toLowerCase().trim();
+    if (query !== '') {
+        list = list.filter(item => {
+            const sec = (item.sector || '').toLowerCase();
+            const syms = (item.symbols || []).join(' ').toLowerCase();
+            return sec.includes(query) || syms.includes(query);
+        });
+    }
+    
+    // 2. Sorting
+    const sortBy = state.comparison.sortSecBy || 'change_dollar';
+    const dir = state.comparison.sortSecDir === 'asc' ? 1 : -1;
+    
+    list.sort((a, b) => {
+        let valA = a[sortBy];
+        let valB = b[sortBy];
+        
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+        
+        if (typeof valA === 'string') {
+            return valA.localeCompare(valB) * dir;
+        }
+        return (valA - valB) * dir;
+    });
+    
+    state.comparison.filteredPositions = list;
+    
+    // Count Label
+    document.getElementById('comp-filtered-count').textContent = `(${list.length} sectors)`;
+    
+    // 3. Paginate
+    const pageSize = state.comparison.pageSize;
+    const totalEntries = list.length;
+    let paginatedList = [];
+    
+    if (pageSize === 'all') {
+        state.comparison.currentPage = 1;
+        paginatedList = list;
+        document.getElementById('comp-pag-start').textContent = totalEntries > 0 ? 1 : 0;
+        document.getElementById('comp-pag-end').textContent = totalEntries;
+    } else {
+        const limit = parseInt(pageSize);
+        const totalPages = Math.ceil(totalEntries / limit) || 1;
+        if (state.comparison.currentPage > totalPages) state.comparison.currentPage = totalPages;
+        if (state.comparison.currentPage < 1) state.comparison.currentPage = 1;
+        
+        const startIdx = (state.comparison.currentPage - 1) * limit;
+        const endIdx = Math.min(startIdx + limit, totalEntries);
+        paginatedList = list.slice(startIdx, endIdx);
+        
+        document.getElementById('comp-pag-start').textContent = totalEntries > 0 ? startIdx + 1 : 0;
+        document.getElementById('comp-pag-end').textContent = endIdx;
+    }
+    
+    document.getElementById('comp-pag-total').textContent = totalEntries;
+    
+    // 4. Render rows
+    const tbody = document.getElementById('comparison-sector-table-body');
+    tbody.innerHTML = '';
+    
+    if (paginatedList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">No matching sectors found.</td></tr>';
+        renderPaginationControls('comparison');
+        return;
+    }
+    
+    paginatedList.forEach(sec => {
+        const tr = document.createElement('tr');
+        const changeClass = sec.change_dollar >= 0 ? 'green-text' : 'red-text';
+        const isCash = sec.sector === 'Cash';
+        
+        tr.innerHTML = `
+            <td class="text-bold"><span class="badge-sector">${sec.sector}</span></td>
+            <td class="text-right">${formatCurrency(sec.start_value)}</td>
+            <td class="text-right">${formatCurrency(sec.end_value)}</td>
+            <td class="text-right ${changeClass} text-bold">${isCash ? '-' : formatCurrency(sec.change_dollar)}</td>
+            <td class="text-right ${changeClass} text-bold">${isCash ? '-' : formatPercent(sec.change_percent)}</td>
+            <td class="text-right text-bold">${formatPercent(sec.weight_percent)}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -782,7 +1011,7 @@ function initSortHeaders() {
         });
     });
     
-    // Comparison table headers
+    // Comparison positions table headers
     document.querySelectorAll('#comparison-table th.sortable').forEach(th => {
         th.addEventListener('click', () => {
             const field = th.dataset.sort;
@@ -799,6 +1028,50 @@ function initSortHeaders() {
             });
             const icon = th.querySelector('i');
             icon.className = state.comparison.sortDir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down';
+            
+            filterAndRenderComparisonTable();
+        });
+    });
+
+    // Comparison industry table headers
+    document.querySelectorAll('#comparison-industry-table th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const field = th.dataset.sortInd;
+            if (state.comparison.sortIndBy === field) {
+                state.comparison.sortIndDir = state.comparison.sortIndDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.comparison.sortIndBy = field;
+                state.comparison.sortIndDir = 'desc';
+            }
+            
+            // Update icons
+            document.querySelectorAll('#comparison-industry-table th.sortable i').forEach(i => {
+                i.className = 'fa-solid fa-sort';
+            });
+            const icon = th.querySelector('i');
+            icon.className = state.comparison.sortIndDir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down';
+            
+            filterAndRenderComparisonTable();
+        });
+    });
+
+    // Comparison sector table headers
+    document.querySelectorAll('#comparison-sector-table th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const field = th.dataset.sortSec;
+            if (state.comparison.sortSecBy === field) {
+                state.comparison.sortSecDir = state.comparison.sortSecDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.comparison.sortSecBy = field;
+                state.comparison.sortSecDir = 'desc';
+            }
+            
+            // Update icons
+            document.querySelectorAll('#comparison-sector-table th.sortable i').forEach(i => {
+                i.className = 'fa-solid fa-sort';
+            });
+            const icon = th.querySelector('i');
+            icon.className = state.comparison.sortSecDir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down';
             
             filterAndRenderComparisonTable();
         });
@@ -862,6 +1135,29 @@ function initToolbarControls() {
         state.comparison.currentPage = 1;
         filterAndRenderComparisonTable();
     });
+
+    // Comparison View Mode Toggle (Positions / Industry / Sector)
+    document.querySelectorAll('#comp-view-mode-toggle button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#comp-view-mode-toggle button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.comparison.viewMode = btn.dataset.view;
+            state.comparison.currentPage = 1;
+            
+            // Toggle table containers
+            document.getElementById('comp-positions-table-container').classList.toggle('hidden', state.comparison.viewMode !== 'positions');
+            document.getElementById('comp-industry-table-container').classList.toggle('hidden', state.comparison.viewMode !== 'industry');
+            document.getElementById('comp-sector-table-container').classList.toggle('hidden', state.comparison.viewMode !== 'sector');
+            
+            // Update Title
+            const titleEl = document.getElementById('comp-table-title');
+            if (state.comparison.viewMode === 'positions') titleEl.textContent = 'Holdings Valuation Delta';
+            else if (state.comparison.viewMode === 'industry') titleEl.textContent = 'Performance by Industry';
+            else if (state.comparison.viewMode === 'sector') titleEl.textContent = 'Performance by Sector';
+            
+            filterAndRenderComparisonTable();
+        });
+    });
     
     // Refresh Button click
     document.getElementById('btn-refresh').addEventListener('click', () => {
@@ -923,7 +1219,7 @@ function initToolbarControls() {
     });
 }
 
-// Load Rankings Options (folders, portfolios, sectors, industries)
+// Load Options (folders, portfolios, sectors, industries) for Rankings & Comparison
 async function loadRanksOptions() {
     try {
         const res = await fetch('/data/ticker-ranks/options');
@@ -935,15 +1231,184 @@ async function loadRanksOptions() {
         state.ranks.optionsLoaded = true;
         
         populateRanksFilters();
+        populateComparisonFilters();
     } catch (err) {
-        showError('Error loading ranking options: ' + err.message);
+        showError('Error loading options: ' + err.message);
     }
+}
+
+// Dynamically refresh sector and industry options for rankings based on selected folder/portfolio
+async function refreshRanksSectors(folder, portfolio) {
+    try {
+        let url = '/data/ticker-ranks/options';
+        const params = [];
+        if (folder) params.push(`directory=${encodeURIComponent(folder)}`);
+        if (portfolio) params.push(`portfolio=${encodeURIComponent(portfolio)}`);
+        if (params.length > 0) url += `?${params.join('&')}`;
+
+        const res = await fetch(url);
+        if (res.ok) {
+            const data = await res.json();
+            state.ranks.sectorsIndustries = data.sectors_industries || {};
+            
+            const sectorSelect = document.getElementById('rank-sector-select');
+            if (sectorSelect) {
+                const prevSector = state.ranks.sector;
+                sectorSelect.innerHTML = '<option value="">-- All Sectors --</option>';
+                Object.keys(state.ranks.sectorsIndustries).sort().forEach(sec => {
+                    const opt = document.createElement('option');
+                    opt.value = sec;
+                    opt.textContent = sec;
+                    sectorSelect.appendChild(opt);
+                });
+                
+                if (prevSector && state.ranks.sectorsIndustries[prevSector]) {
+                    sectorSelect.value = prevSector;
+                } else {
+                    state.ranks.sector = '';
+                    sectorSelect.value = '';
+                }
+            }
+            populateRanksIndustries(state.ranks.sector);
+        }
+    } catch (e) {
+        console.error('Error refreshing ranks sectors:', e);
+    }
+}
+
+// Update comparison sector dropdown based on actual records returned in comparison data
+function updateComparisonSectorOptions(data) {
+    const sectorSelect = document.getElementById('compare-sector-select');
+    if (!sectorSelect) return;
+
+    // Collect distinct sectors and industries from the positions dataset
+    const sectorIndustries = {};
+    (data.positions || []).forEach(p => {
+        const sec = p.sector;
+        const ind = p.industry;
+        if (sec && sec !== 'Unknown') {
+            if (!sectorIndustries[sec]) sectorIndustries[sec] = new Set();
+            if (ind && ind !== 'Unknown') sectorIndustries[sec].add(ind);
+        }
+    });
+
+    state.comparison.availableSectorIndustries = sectorIndustries;
+
+    // Rebuild Sector dropdown preserving current value if still valid
+    const prevSector = state.comparison.sector;
+    sectorSelect.innerHTML = '<option value="">-- All Sectors --</option>';
+    Object.keys(sectorIndustries).sort().forEach(sec => {
+        const opt = document.createElement('option');
+        opt.value = sec;
+        opt.textContent = sec;
+        sectorSelect.appendChild(opt);
+    });
+
+    if (prevSector && sectorIndustries[prevSector]) {
+        sectorSelect.value = prevSector;
+    } else if (prevSector && !sectorIndustries[prevSector]) {
+        state.comparison.sector = '';
+        sectorSelect.value = '';
+    }
+
+    populateComparisonIndustries(state.comparison.sector);
+}
+
+// Populate Comparison Filter Dropdowns
+function populateComparisonFilters() {
+    const dirSelect = document.getElementById('compare-dir-select');
+    const sectorSelect = document.getElementById('compare-sector-select');
+    if (!dirSelect || !sectorSelect) return;
+    
+    // Clear and populate Folders
+    dirSelect.innerHTML = '<option value="">-- All Folders --</option>';
+    Object.keys(state.ranks.dirsPortfolios || {}).forEach(folder => {
+        const opt = document.createElement('option');
+        opt.value = folder;
+        opt.textContent = folder;
+        dirSelect.appendChild(opt);
+    });
+    
+    // Dynamic dependency listeners
+    dirSelect.addEventListener('change', (e) => {
+        state.comparison.directory = e.target.value;
+        state.comparison.portfolio = '';
+        state.comparison.sector = '';
+        state.comparison.industry = '';
+        state.comparison.currentPage = 1;
+        populateComparisonPortfolios(e.target.value);
+        loadComparisonData();
+    });
+    
+    const portSelect = document.getElementById('compare-port-select');
+    if (portSelect) {
+        portSelect.addEventListener('change', (e) => {
+            state.comparison.portfolio = e.target.value;
+            state.comparison.sector = '';
+            state.comparison.industry = '';
+            state.comparison.currentPage = 1;
+            loadComparisonData();
+        });
+    }
+    
+    sectorSelect.addEventListener('change', (e) => {
+        state.comparison.sector = e.target.value;
+        state.comparison.industry = '';
+        state.comparison.currentPage = 1;
+        populateComparisonIndustries(e.target.value);
+        loadComparisonData();
+    });
+    
+    const indSelect = document.getElementById('compare-industry-select');
+    if (indSelect) {
+        indSelect.addEventListener('change', (e) => {
+            state.comparison.industry = e.target.value;
+            state.comparison.currentPage = 1;
+            loadComparisonData();
+        });
+    }
+}
+
+function populateComparisonPortfolios(folder) {
+    const portSelect = document.getElementById('compare-port-select');
+    if (!portSelect) return;
+    portSelect.innerHTML = '<option value="">-- All Portfolios --</option>';
+    if (folder && state.ranks.dirsPortfolios && state.ranks.dirsPortfolios[folder]) {
+        state.ranks.dirsPortfolios[folder].forEach(port => {
+            const opt = document.createElement('option');
+            opt.value = port;
+            opt.textContent = port;
+            portSelect.appendChild(opt);
+        });
+    }
+}
+
+function populateComparisonIndustries(sector) {
+    const indSelect = document.getElementById('compare-industry-select');
+    if (!indSelect) return;
+    indSelect.innerHTML = '<option value="">-- All Industries --</option>';
+    
+    const secIndMap = state.comparison.availableSectorIndustries || {};
+    let industries = [];
+    if (sector && secIndMap[sector]) {
+        industries = Array.from(secIndMap[sector]).sort();
+    } else if (sector && state.ranks.sectorsIndustries && state.ranks.sectorsIndustries[sector]) {
+        industries = state.ranks.sectorsIndustries[sector];
+    }
+    
+    industries.forEach(ind => {
+        const opt = document.createElement('option');
+        opt.value = ind;
+        opt.textContent = ind;
+        indSelect.appendChild(opt);
+    });
 }
 
 // Populate Rankings Filter Dropdowns
 function populateRanksFilters() {
     const dirSelect = document.getElementById('rank-dir-select');
     const sectorSelect = document.getElementById('rank-sector-select');
+    if (!dirSelect || !sectorSelect) return;
     
     // Clear and populate Folders
     dirSelect.innerHTML = '<option value="">-- All Folders --</option>';
@@ -956,7 +1421,7 @@ function populateRanksFilters() {
     
     // Clear and populate Sectors
     sectorSelect.innerHTML = '<option value="">-- All Sectors --</option>';
-    Object.keys(state.ranks.sectorsIndustries).forEach(sector => {
+    Object.keys(state.ranks.sectorsIndustries).sort().forEach(sector => {
         const opt = document.createElement('option');
         opt.value = sector;
         opt.textContent = sector;
@@ -964,13 +1429,28 @@ function populateRanksFilters() {
     });
     
     // Wire up dynamic dependency listeners
-    dirSelect.addEventListener('change', (e) => {
+    dirSelect.addEventListener('change', async (e) => {
         state.ranks.directory = e.target.value;
         state.ranks.portfolio = '';
+        state.ranks.sector = '';
+        state.ranks.industry = '';
         state.ranks.currentPage = 1;
         populateRanksPortfolios(e.target.value);
+        await refreshRanksSectors(e.target.value, '');
         loadRanksData();
     });
+    
+    const portSelect = document.getElementById('rank-port-select');
+    if (portSelect) {
+        portSelect.addEventListener('change', async (e) => {
+            state.ranks.portfolio = e.target.value;
+            state.ranks.sector = '';
+            state.ranks.industry = '';
+            state.ranks.currentPage = 1;
+            await refreshRanksSectors(state.ranks.directory, e.target.value);
+            loadRanksData();
+        });
+    }
     
     sectorSelect.addEventListener('change', (e) => {
         state.ranks.sector = e.target.value;
@@ -983,6 +1463,7 @@ function populateRanksFilters() {
 
 function populateRanksPortfolios(folder) {
     const portSelect = document.getElementById('rank-port-select');
+    if (!portSelect) return;
     portSelect.innerHTML = '<option value="">-- All Portfolios --</option>';
     if (folder && state.ranks.dirsPortfolios[folder]) {
         state.ranks.dirsPortfolios[folder].forEach(port => {
@@ -996,6 +1477,7 @@ function populateRanksPortfolios(folder) {
 
 function populateRanksIndustries(sector) {
     const indSelect = document.getElementById('rank-industry-select');
+    if (!indSelect) return;
     indSelect.innerHTML = '<option value="">-- All Industries --</option>';
     if (sector && state.ranks.sectorsIndustries[sector]) {
         state.ranks.sectorsIndustries[sector].forEach(ind => {

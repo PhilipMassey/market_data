@@ -225,9 +225,9 @@
 
             <!-- ================= VIEW 2: PERFORMANCE COMPARISON ================= -->
             <div id="view-comparison" class="tab-view hidden">
-                <!-- Date Selector Bar -->
+                <!-- Date & Filter Selector Bar -->
                 <section class="comparison-selectors card card-glass">
-                    <div class="selector-container">
+                    <div class="selector-container ranks-selectors">
                         <div class="selector-field">
                             <label for="compare-start-date"><i class="fa-solid fa-calendar-days"></i> Start Date:</label>
                             <input type="text" id="compare-start-date" class="date-picker-input" placeholder="Select Start Date">
@@ -235,6 +235,30 @@
                         <div class="selector-field">
                             <label for="compare-end-date"><i class="fa-solid fa-calendar-days"></i> End Date:</label>
                             <input type="text" id="compare-end-date" class="date-picker-input" placeholder="Select End Date">
+                        </div>
+                        <div class="selector-field">
+                            <label for="compare-dir-select"><i class="fa-solid fa-folder"></i> Folder:</label>
+                            <select id="compare-dir-select">
+                                <option value="">-- All Folders --</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="compare-port-select"><i class="fa-solid fa-file-csv"></i> Portfolio:</label>
+                            <select id="compare-port-select">
+                                <option value="">-- All Portfolios --</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="compare-sector-select"><i class="fa-solid fa-industry"></i> Sector:</label>
+                            <select id="compare-sector-select">
+                                <option value="">-- All Sectors --</option>
+                            </select>
+                        </div>
+                        <div class="selector-field">
+                            <label for="compare-industry-select"><i class="fa-solid fa-gear"></i> Industry:</label>
+                            <select id="compare-industry-select">
+                                <option value="">-- All Industries --</option>
+                            </select>
                         </div>
                         <button id="btn-compare" class="btn btn-primary">
                             <i class="fa-solid fa-magnifying-glass-chart"></i> Compare
@@ -289,13 +313,26 @@
                     <div class="card card-glass">
                         <div class="table-toolbar">
                             <div class="toolbar-left">
-                                <h3>Holdings Valuation Delta</h3>
-                                <span id="comp-filtered-count" class="text-muted">(0 positions)</span>
+                                <div class="toolbar-title-group">
+                                    <h3 id="comp-table-title">Holdings Valuation Delta</h3>
+                                    <span id="comp-filtered-count" class="text-muted">(0 positions)</span>
+                                </div>
+                                <div class="view-mode-toggle" id="comp-view-mode-toggle">
+                                    <button id="btn-comp-view-positions" class="btn btn-sm btn-toggle active" data-view="positions">
+                                        <i class="fa-solid fa-table-list"></i> Positions
+                                    </button>
+                                    <button id="btn-comp-view-industry" class="btn btn-sm btn-toggle" data-view="industry">
+                                        <i class="fa-solid fa-gear"></i> By Industry
+                                    </button>
+                                    <button id="btn-comp-view-sector" class="btn btn-sm btn-toggle" data-view="sector">
+                                        <i class="fa-solid fa-industry"></i> By Sector
+                                    </button>
+                                </div>
                             </div>
                             <div class="toolbar-right">
                                 <div class="search-box">
                                     <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                                    <input type="text" id="compare-search-input" placeholder="Search by ticker or account...">
+                                    <input type="text" id="compare-search-input" placeholder="Search by ticker, sector, industry...">
                                 </div>
                                 <div class="page-size-selector">
                                     <label for="compare-page-size-select">Show:</label>
@@ -310,12 +347,14 @@
                             </div>
                         </div>
 
-                        <div class="table-container">
+                        <!-- Positions Table -->
+                        <div class="table-container" id="comp-positions-table-container">
                             <table id="comparison-table">
                                 <thead>
                                     <tr>
                                         <th data-sort="symbol" class="sortable">Ticker <i class="fa-solid fa-sort"></i></th>
-                                        <th data-sort="account_name" class="sortable">Account <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="sector" class="sortable">Sector <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort="industry" class="sortable">Industry <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="qty_change" class="sortable text-right">Qty Change <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="start_value" class="sortable text-right">Start Value <i class="fa-solid fa-sort"></i></th>
                                         <th data-sort="end_value" class="sortable text-right">End Value <i class="fa-solid fa-sort"></i></th>
@@ -324,6 +363,46 @@
                                     </tr>
                                 </thead>
                                 <tbody id="comparison-table-body">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Industry Totals Table -->
+                        <div class="table-container hidden" id="comp-industry-table-container">
+                            <table id="comparison-industry-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort-ind="industry" class="sortable">Industry <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="sector" class="sortable">Sector <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="symbol_count" class="sortable text-center">Tickers <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="start_value" class="sortable text-right">Start Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="end_value" class="sortable text-right">End Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="change_dollar" class="sortable text-right">Gain / Loss ($) <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="change_percent" class="sortable text-right">Gain / Loss (%) <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-ind="weight_percent" class="sortable text-right">Portfolio Weight (%) <i class="fa-solid fa-sort"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comparison-industry-table-body">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Sector Totals Table -->
+                        <div class="table-container hidden" id="comp-sector-table-container">
+                            <table id="comparison-sector-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort-sec="sector" class="sortable">Sector <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-sec="start_value" class="sortable text-right">Start Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-sec="end_value" class="sortable text-right">End Value <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-sec="change_dollar" class="sortable text-right">Gain / Loss ($) <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-sec="change_percent" class="sortable text-right">Gain / Loss (%) <i class="fa-solid fa-sort"></i></th>
+                                        <th data-sort-sec="weight_percent" class="sortable text-right">Portfolio Weight (%) <i class="fa-solid fa-sort"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comparison-sector-table-body">
                                     <!-- Injected by JS -->
                                 </tbody>
                             </table>
