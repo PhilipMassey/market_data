@@ -14,7 +14,7 @@ The application relies on a local SQLite database file to store market and portf
 
 ### 1. `market_data_close`
 
-* **Purpose**: Stores historical daily closing prices for stock symbols.
+* **Purpose**: Stores historical daily closing prices for stock tickers.
 * **Populated By**:
   * **Script**: [market_data_downloader.py](file:///Users/philipmassey/projects/market_data/market_data_downloader.py) and [market_data_close.py](file:///Users/philipmassey/projects/market_data/stock_mdb/market_data_close.py).
   * **Data Source**: Yahoo Finance API via the `yfinance` Python library.

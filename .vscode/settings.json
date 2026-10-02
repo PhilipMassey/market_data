@@ -20,7 +20,8 @@
         "**/.agents": true,
         "**/.DS_Store": true,
         "**/.gitkeep": true,
-        "tickers/**/*.csv": false
+        "tickers/**/*.csv": false,
         "pyrefly.toml": true
-    }
+    },
+    "git.autoRepositoryDetection": "subFolders"
 }

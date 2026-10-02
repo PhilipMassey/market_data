@@ -209,12 +209,13 @@ def test_process_seeking_alpha_exports_success(tmp_path):
     ws.append(['JEPQ'])  # duplicate
     wb.save(str(file_new))
     
-    # Create Top Stocks file
+    # Create Top Stocks file (including a symbol with '.' such as PRB.A to test filtering)
     file_other = downloads_dir / "Top Stocks 2026-06-14.xlsx"
     wb = Workbook()
     ws = wb.active
     ws.append(['Symbol'])
     ws.append(['AAPL'])
+    ws.append(['PRB.A'])
     ws.append(['MSFT'])
     wb.save(str(file_other))
     
@@ -240,7 +241,7 @@ def test_process_seeking_alpha_exports_success(tmp_path):
         # Expect unique, uppercase, non-empty, sorted alphabetically: ADX, AGNC, JEPQ
         assert df_div['Symbol'].tolist() == ['ADX', 'AGNC', 'JEPQ']
         
-        # Check Top Stocks (should be in Seeking_Alpha)
+        # Check Top Stocks (should be in Seeking_Alpha, with PRB.A filtered out)
         top_csv = sa_dir / "Top Stocks.csv"
         assert top_csv.exists()
         df_top = pd.read_csv(top_csv)
@@ -295,22 +296,15 @@ def test_compare_holdings_and_write_mismatches_with_differences():
     from contextlib import redirect_stdout
     from unittest.mock import patch
 
-    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers, \
-         patch('utils.ticker_reader.get_tickers_from_directory') as mock_get_dir:
-        
-        # When called for ('Holding', 'Current Stocks') -> ['AAPL', 'GOOG']
-        # When called for ('Holding', 'Current Others') -> ['MSFT']
-        # Total seeking_symbols = {'AAPL', 'GOOG', 'MSFT'}
+    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers:
         def side_effect(folder, port=None):
             if port == 'Current Stocks':
                 return ['AAPL', 'GOOG']
-            if port == 'Current Others':
-                return ['MSFT']
+            if port == 'Stocks':
+                return ['AAPL', 'TSLA']
             return []
         
         mock_get_tickers.side_effect = side_effect
-        # fidelity_symbols = {'AAPL', 'MSFT', 'TSLA'}
-        mock_get_dir.return_value = ['AAPL', 'MSFT', 'TSLA']
 
         f = io.StringIO()
         with redirect_stdout(f):
@@ -328,16 +322,15 @@ def test_compare_holdings_and_write_mismatches_perfect_match():
     from contextlib import redirect_stdout
     from unittest.mock import patch
 
-    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers, \
-         patch('utils.ticker_reader.get_tickers_from_directory') as mock_get_dir:
-        
+    with patch('utils.ticker_reader.get_tickers') as mock_get_tickers:
         def side_effect(folder, port=None):
             if port == 'Current Stocks':
+                return ['AAPL']
+            if port == 'Stocks':
                 return ['AAPL']
             return []
         
         mock_get_tickers.side_effect = side_effect
-        mock_get_dir.return_value = ['AAPL']
 
         f = io.StringIO()
         with redirect_stdout(f):

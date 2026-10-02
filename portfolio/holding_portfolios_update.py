@@ -197,6 +197,14 @@ def process_seeking_alpha_exports() -> bool:
             symbols = df['Symbol'].dropna().astype(str).str.strip().str.upper()
             symbols = symbols[symbols != ''].drop_duplicates().tolist()
             
+            # Filter out symbols containing '.' (e.g., 'PRB.A') for Top Stocks
+            if "Top Stocks" in base_name:
+                filtered_symbols = [s for s in symbols if '.' not in s]
+                removed = [s for s in symbols if '.' in s]
+                if removed:
+                    print(f"Filtered out {len(removed)} ticker(s) containing '.' from {base_name}: {removed}")
+                symbols = filtered_symbols
+
             # Sort alphabetically
             symbols.sort()
             
@@ -380,28 +388,28 @@ def process_fidelity_export(file_path: str):
 
 def compare_holdings_and_write_mismatches(project_root: str = None):
     """
-    Compares symbols in 'Current <Port>' and 'Current Others' (Seeking Alpha exports)
-    against symbols in the Holding directory (Fidelity exports).
+    Compares tickers in 'Current <Port>' and 'Current Others' (Seeking Alpha exports)
+    against tickers in the Holding directory (Fidelity exports).
     Prints fidelity extras and seeking extras.
     """
     from utils.ticker_reader import get_tickers, get_tickers_from_directory
 
-    portfolios = ['Dividends', 'ETFs', 'International', 'Stocks']
+    portfolios = ['Dividends', 'ETFs', 'International', 'Stocks','Shorts']
     holding_dir = 'Holding'
 
-    seeking_symbols = []
+    seeking_tickers = []
     for port in portfolios:
-        seeking_symbols.extend(get_tickers(holding_dir, 'Current ' + port))
-    seeking_symbols = set(seeking_symbols)
+        seeking_tickers.extend(get_tickers(holding_dir, 'Current ' + port))
+    seeking_tickers = set(seeking_tickers)
 
-    fidelity_symbols = []
+    fidelity_tickers = []
     for port in portfolios:
-        fidelity_symbols.extend(get_tickers(holding_dir, port))
-    fidelity_symbols = set(fidelity_symbols)
+        fidelity_tickers.extend(get_tickers(holding_dir, port))
+    fidelity_tickers = set(fidelity_tickers)
 
-    # fidelity_symbols = set(get_tickers_from_directory(holding_dir))
-    print('fidelity extras ', fidelity_symbols.difference(seeking_symbols))
-    print('seeking extras ', seeking_symbols.difference(fidelity_symbols))
+    # fidelity_tickers = set(get_tickers_from_directory(holding_dir))
+    print('fidelity extras ', fidelity_tickers.difference(seeking_tickers))
+    print('seeking extras ', seeking_tickers.difference(fidelity_tickers))
 
 def update_holding_portfolios_from_file():
     """

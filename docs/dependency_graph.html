@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Market Data Project — Dependency Graph</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style>
+    :root {
+      --bg-base: #0a0d14;
+      --bg-surface: #111622;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --border-color: #1e2638;
+      --border-active: #3b82f6;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      --c-external: #ec4899;
+      --c-utils: #10b981;
+      --c-database: #3b82f6;
+      --c-stock: #f59e0b;
+      --c-portfolio: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(10, 13, 20, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+    }
+
+    .brand-title h1 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-title p {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .controls-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .search-box {
+      position: relative;
+    }
+
+    .search-box input {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 7px 12px 7px 32px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      width: 220px;
+      transition: all 0.2s ease;
+    }
+
+    .search-box input:focus {
+      border-color: var(--border-active);
+      width: 280px;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      fill: var(--text-muted);
+    }
+
+    .filter-btn-group {
+      display: flex;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .filter-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .filter-btn.active {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: #1e293b;
+      border-color: var(--text-muted);
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+
+    #main-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+    }
+
+    #network-canvas {
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 50% 50%, #111728 0%, #080b12 100%);
+    }
+
+    /* Floating Legend */
+    .legend-panel {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      background: var(--bg-card);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      padding: 12px 16px;
+      border-radius: 12px;
+      z-index: 10;
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    .legend-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .legend-item:hover {
+      opacity: 0.8;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    /* Floating Drawer */
+    .inspector-panel {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      width: 350px;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      z-index: 15;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      animation: fadeInRight 0.2s ease-out;
+    }
+
+    @keyframes fadeInRight {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .inspector-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .inspector-title {
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+      word-break: break-all;
+    }
+
+    .inspector-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 4px;
+    }
+
+    .inspector-close:hover {
+      color: var(--text-primary);
+    }
+
+    .inspector-body {
+      padding: 16px;
+      overflow-y: auto;
+      max-height: calc(80vh - 120px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .desc-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+
+    .dep-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .dep-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .dep-item:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--border-active);
+    }
+
+    .dep-pill {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: #1e293b;
+      color: var(--text-muted);
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 8px;
+      padding: 0 16px 16px;
+    }
+
+    .stat-card {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-lbl {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    /* Zoom / Layout controls */
+    .canvas-actions {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--bg-card);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: #1e293b;
+      border-color: var(--border-active);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">M</div>
+      <div class="brand-title">
+        <h1>Market Data Dependency Architecture</h1>
+        <p>Interactive Codebase & Package Dependency Visualizer</p>
+      </div>
+    </div>
+
+    <div class="controls-bar">
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24">
+          <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="node-search" placeholder="Find module or package..." />
+      </div>
+
+      <div class="filter-btn-group">
+        <button class="filter-btn active" data-group="all">All</button>
+        <button class="filter-btn" data-group="internal">Internal Only</button>
+        <button class="filter-btn" data-group="external">External Only</button>
+        <button class="filter-btn" data-group="database">Database</button>
+        <button class="filter-btn" data-group="portfolio">Portfolio</button>
+        <button class="filter-btn" data-group="stock_mdb">Stock MDB</button>
+        <button class="filter-btn" data-group="utils">Utils</button>
+      </div>
+
+      <button class="btn" id="toggle-layout">Hierarchical View</button>
+      <button class="btn btn-primary" id="reset-focus">Reset View</button>
+    </div>
+  </header>
+
+  <div id="main-container">
+    <div id="network-canvas"></div>
+
+    <!-- Legend -->
+    <div class="legend-panel">
+      <div class="legend-title">Layers & Modules</div>
+      <div class="legend-item" data-group="external">
+        <div class="legend-color" style="background: var(--c-external);"></div>
+        <span>External Packages (8)</span>
+      </div>
+      <div class="legend-item" data-group="database">
+        <div class="legend-color" style="background: var(--c-database);"></div>
+        <span>Database Layer (9)</span>
+      </div>
+      <div class="legend-item" data-group="portfolio">
+        <div class="legend-color" style="background: var(--c-portfolio);"></div>
+        <span>Portfolio Analytics & UI (5)</span>
+      </div>
+      <div class="legend-item" data-group="stock_mdb">
+        <div class="legend-color" style="background: var(--c-stock);"></div>
+        <span>Market Ingestion (3)</span>
+      </div>
+      <div class="legend-item" data-group="utils">
+        <div class="legend-color" style="background: var(--c-utils);"></div>
+        <span>Core Utilities (2)</span>
+      </div>
+    </div>
+
+    <!-- Floating Node Inspector Drawer -->
+    <div class="inspector-panel" id="inspector">
+      <div class="inspector-header">
+        <div>
+          <span class="badge" id="insp-badge">MODULE</span>
+          <div class="inspector-title" id="insp-title">module_name</div>
+        </div>
+        <button class="inspector-close" id="insp-close">&times;</button>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-val" id="insp-fan-out">0</div>
+          <div class="stat-lbl">Dependencies</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="insp-fan-in">0</div>
+          <div class="stat-lbl">Dependents</div>
+        </div>
+      </div>
+
+      <div class="inspector-body">
+        <div>
+          <div class="section-title">Role & Purpose</div>
+          <p class="desc-text" id="insp-desc">Description of this module...</p>
+        </div>
+
+        <div>
+          <div class="section-title">Imports / Uses (Dependencies)</div>
+          <ul class="dep-list" id="insp-outgoing"></ul>
+        </div>
+
+        <div>
+          <div class="section-title">Imported By (Used by)</div>
+          <ul class="dep-list" id="insp-incoming"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom actions -->
+    <div class="canvas-actions">
+      <button class="icon-btn" id="zoom-in" title="Zoom In">+</button>
+      <button class="icon-btn" id="zoom-out" title="Zoom Out">&minus;</button>
+      <button class="icon-btn" id="zoom-fit" title="Fit Entire Graph">&#x2922;</button>
+    </div>
+  </div>
+
+  <script>
+    const graphData = {
+      nodes: [
+        // External Packages
+        { id: "ext:yfinance", label: "yfinance", group: "external", role: "Yahoo Finance API client for historical stock quotes & metadata", type: "Package (v1.5.2)" },
+        { id: "ext:pandas", label: "pandas", group: "external", role: "Core tabular data structures (DataFrames), filtering, CSV processing", type: "Package (v3.0.3)" },
+        { id: "ext:numpy", label: "numpy", group: "external", role: "Vectorized array calculations & mathematical routines", type: "Package (v2.5.1)" },
+        { id: "ext:flask", label: "Flask", group: "external", role: "WSGI web microframework powering the Portfolio Dashboard UI", type: "Package (v3.1.3)" },
+        { id: "ext:pmc", label: "pandas_market_calendars", group: "external", role: "Stock market exchange calendar (NYSE/NASDAQ) & trading schedule", type: "Package (v5.4.0)" },
+        { id: "ext:openpyxl", label: "openpyxl", group: "external", role: "Excel .xlsx reader for Seeking Alpha portfolio spreadsheets", type: "Package (v3.1.5)" },
+        { id: "ext:duckdb", label: "duckdb", group: "external", role: "In-process analytical database for price rank snapshots", type: "Package (v1.5.5)" },
+        { id: "ext:pytest", label: "pytest", group: "external", role: "Unit testing runner and fixture framework", type: "Package (v9.1.1)" },
+
+        // Utils
+        { id: "utils.calendar_utils", label: "utils.calendar_utils", group: "utils", role: "Market schedule logic, market open checks, valid trading dates calculation", type: "Utility Module" },
+        { id: "utils.ticker_reader", label: "utils.ticker_reader", group: "utils", role: "Loads ticker symbols from CSV files across Seeking Alpha & Holding portfolios", type: "Utility Module" },
+
+        // Database
+        { id: "database.sqlite_connection", label: "database.sqlite_connection", group: "database", role: "Central SQLite DB connection manager and transaction context", type: "Core Database" },
+        { id: "database.database_utils", label: "database.database_utils", group: "database", role: "Utility functions for table inspections, profile checks, and record counts", type: "Database Utility" },
+        { id: "database.update_ticker_metadata", label: "database.update_ticker_metadata", group: "database", role: "Queries yfinance for sector, industry, company name, updates profile table", type: "Metadata Admin" },
+        { id: "database.sync_ticker_metadata_from_sheet", label: "database.sync_ticker_metadata_from_sheet", group: "database", role: "Synchronizes metadata mappings from Google Sheets", type: "Metadata Admin" },
+        { id: "database.delete_orphan_profiles", label: "database.delete_orphan_profiles", group: "database", role: "Removes metadata profiles no longer tracked in active portfolio lists", type: "DB Maintenance" },
+        { id: "database.delete_unknown_profiles", label: "database.delete_unknown_profiles", group: "database", role: "Prunes defunct and unrecognized profile entries from SQLite", type: "DB Maintenance" },
+        { id: "database.view_meta_records", label: "database.view_meta_records", group: "database", role: "Displays metadata records in formatted pandas DataFrames", type: "DB Inspection" },
+        { id: "database.list_sectors_industries", label: "database.list_sectors_industries", group: "database", role: "Lists distinct sector and industry classifications present in DB", type: "DB Inspection" },
+        { id: "database.list_unassigned", label: "database.list_unassigned", group: "database", role: "Identifies tickers lacking assigned sectors or industries", type: "DB Inspection" },
+
+        // Stock MDB
+        { id: "stock_mdb.market_data_close", label: "stock_mdb.market_data_close", group: "stock_mdb", role: "Daily close downloader: fetches daily prices from yfinance and commits to DB", type: "Market Ingestion" },
+        { id: "stock_mdb.load_missing", label: "stock_mdb/load_missing", group: "stock_mdb", role: "Checks for gaps in market_data_close and backfills missing trading sessions", type: "Market Ingestion" },
+        { id: "stock_mdb.scripts.fix_close_price", label: "stock_mdb.fix_close_price", group: "stock_mdb", role: "Utility script to correct erroneous close prices in database", type: "Data Repair" },
+
+        // Portfolio
+        { id: "portfolio.ticker_period_ranks_data", label: "portfolio.ticker_period_ranks_data", group: "portfolio", role: "Core ranking engine: calculates return % and relative percentiles (1M, 3M, 6M, 1Y)", type: "Analytics Engine" },
+        { id: "portfolio.holding_portfolios_update", label: "portfolio.holding_portfolios_update", group: "portfolio", role: "Parses Seeking Alpha & Fidelity exports, synchronizes local holding portfolios", type: "Portfolio Sync" },
+        { id: "portfolio.load_holding_portfolios", label: "portfolio.load_holding_portfolios", group: "portfolio", role: "Coordinates portfolio sync and metadata refresh in a single execution", type: "Portfolio Loader" },
+        { id: "portfolio.portfolio_dashboard", label: "portfolio.portfolio_dashboard", group: "portfolio", role: "Flask web server rendering portfolio ranks, sector heatmaps, and performance charts", type: "Web Dashboard" },
+        { id: "portfolio.compare_current_and_sa", label: "portfolio.compare_current_and_sa", group: "portfolio", role: "Cross-checks actual Fidelity positions with Seeking Alpha target lists", type: "Portfolio Sync" }
+      ],
+      edges: [
+        // Utils
+        { from: "utils.calendar_utils", to: "ext:pmc" },
+        { from: "utils.ticker_reader", to: "ext:pandas" },
+
+        // Database
+        { from: "database.database_utils", to: "database.sqlite_connection" },
+        { from: "database.update_ticker_metadata", to: "database.sqlite_connection" },
+        { from: "database.update_ticker_metadata", to: "portfolio.ticker_period_ranks_data" },
+        { from: "database.update_ticker_metadata", to: "utils.ticker_reader" },
+        { from: "database.update_ticker_metadata", to: "ext:yfinance" },
+        { from: "database.sync_ticker_metadata_from_sheet", to: "database.sqlite_connection" },
+        { from: "database.sync_ticker_metadata_from_sheet", to: "portfolio.ticker_period_ranks_data" },
+        { from: "database.delete_orphan_profiles", to: "database.sqlite_connection" },
+        { from: "database.delete_orphan_profiles", to: "portfolio.ticker_period_ranks_data" },
+        { from: "database.delete_orphan_profiles", to: "utils.ticker_reader" },
+        { from: "database.delete_unknown_profiles", to: "database.sqlite_connection" },
+        { from: "database.view_meta_records", to: "database.sqlite_connection" },
+        { from: "database.view_meta_records", to: "ext:pandas" },
+        { from: "database.list_sectors_industries", to: "database.sqlite_connection" },
+        { from: "database.list_unassigned", to: "database.sqlite_connection" },
+
+        // Stock MDB
+        { from: "stock_mdb.market_data_close", to: "database.sqlite_connection" },
+        { from: "stock_mdb.market_data_close", to: "utils.calendar_utils" },
+        { from: "stock_mdb.market_data_close", to: "utils.ticker_reader" },
+        { from: "stock_mdb.market_data_close", to: "ext:yfinance" },
+        { from: "stock_mdb.market_data_close", to: "ext:pandas" },
+        { from: "stock_mdb.load_missing", to: "stock_mdb.market_data_close" },
+        { from: "stock_mdb.scripts.fix_close_price", to: "database.sqlite_connection" },
+        { from: "stock_mdb.scripts.fix_close_price", to: "utils.ticker_reader" },
+        { from: "stock_mdb.scripts.fix_close_price", to: "ext:yfinance" },
+        { from: "stock_mdb.scripts.fix_close_price", to: "ext:pandas" },
+
+        // Portfolio
+        { from: "portfolio.ticker_period_ranks_data", to: "database.database_utils" },
+        { from: "portfolio.ticker_period_ranks_data", to: "database.sqlite_connection" },
+        { from: "portfolio.ticker_period_ranks_data", to: "utils.ticker_reader" },
+        { from: "portfolio.ticker_period_ranks_data", to: "ext:pandas" },
+        { from: "portfolio.ticker_period_ranks_data", to: "ext:numpy" },
+        { from: "portfolio.ticker_period_ranks_data", to: "ext:pmc" },
+
+        { from: "portfolio.holding_portfolios_update", to: "database.sqlite_connection" },
+        { from: "portfolio.holding_portfolios_update", to: "utils.ticker_reader" },
+        { from: "portfolio.holding_portfolios_update", to: "ext:pandas" },
+        { from: "portfolio.holding_portfolios_update", to: "ext:numpy" },
+
+        { from: "portfolio.load_holding_portfolios", to: "database.update_ticker_metadata" },
+        { from: "portfolio.load_holding_portfolios", to: "portfolio.holding_portfolios_update" },
+
+        { from: "portfolio.portfolio_dashboard", to: "database.sqlite_connection" },
+        { from: "portfolio.portfolio_dashboard", to: "portfolio.ticker_period_ranks_data" },
+        { from: "portfolio.portfolio_dashboard", to: "utils.calendar_utils" },
+        { from: "portfolio.portfolio_dashboard", to: "utils.ticker_reader" },
+        { from: "portfolio.portfolio_dashboard", to: "ext:flask" },
+        { from: "portfolio.portfolio_dashboard", to: "ext:pandas" },
+        { from: "portfolio.portfolio_dashboard", to: "ext:numpy" },
+
+        { from: "portfolio.compare_current_and_sa", to: "utils.ticker_reader" }
+      ]
+    };
+
+    const colorMap = {
+      external: { background: "#ec4899", border: "#f472b6", highlight: "#f9a8d4" },
+      utils: { background: "#10b981", border: "#34d399", highlight: "#6ee7b7" },
+      database: { background: "#3b82f6", border: "#60a5fa", highlight: "#93c5fd" },
+      stock_mdb: { background: "#f59e0b", border: "#fbbf24", highlight: "#fde68a" },
+      portfolio: { background: "#8b5cf6", border: "#a78bfa", highlight: "#c4b5fd" }
+    };
+
+    const nodesArray = graphData.nodes.map(n => {
+      const colors = colorMap[n.group] || colorMap.external;
+      const isExternal = n.group === 'external';
+      return {
+        id: n.id,
+        label: n.label,
+        shape: isExternal ? 'box' : 'box',
+        margin: 10,
+        color: {
+          background: colors.background,
+          border: colors.border,
+          highlight: { background: colors.highlight, border: "#ffffff" }
+        },
+        font: {
+          color: "#ffffff",
+          face: "JetBrains Mono, Inter, monospace",
+          size: isExternal ? 13 : 12,
+          bold: isExternal
+        },
+        borderWidth: 2,
+        shadow: { enabled: true, color: "rgba(0,0,0,0.6)", size: 10, x: 2, y: 5 },
+        originalGroup: n.group,
+        data: n
+      };
+    });
+
+    const edgesArray = graphData.edges.map(e => ({
+      from: e.from,
+      to: e.to,
+      arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+      color: { color: "rgba(148, 163, 184, 0.4)", highlight: "#60a5fa", hover: "#93c5fd" },
+      width: 1.5,
+      smooth: { type: 'cubicBezier', roundness: 0.3 }
+    }));
+
+    const visNodes = new vis.DataSet(nodesArray);
+    const visEdges = new vis.DataSet(edgesArray);
+
+    const container = document.getElementById('network-canvas');
+    let isHierarchical = false;
+
+    function getOptions(hierarchical = false) {
+      if (hierarchical) {
+        return {
+          layout: {
+            hierarchical: {
+              enabled: true,
+              direction: "UD",
+              sortMethod: "directed",
+              nodeSpacing: 180,
+              levelSeparation: 140
+            }
+          },
+          physics: { enabled: false }
+        };
+      }
+      return {
+        layout: { hierarchical: { enabled: false } },
+        physics: {
+          solver: "forceAtlas2Based",
+          forceAtlas2Based: {
+            gravitationalConstant: -70,
+            centralGravity: 0.008,
+            springLength: 130,
+            springConstant: 0.08,
+            damping: 0.7
+          },
+          stabilization: { iterations: 150 }
+        },
+        interaction: { hover: true, tooltipDelay: 100 }
+      };
+    }
+
+    let network = new vis.Network(container, { nodes: visNodes, edges: visEdges }, getOptions(false));
+
+    // Interaction Handlers
+    const inspector = document.getElementById('inspector');
+    const inspBadge = document.getElementById('insp-badge');
+    const inspTitle = document.getElementById('insp-title');
+    const inspDesc = document.getElementById('insp-desc');
+    const inspFanOut = document.getElementById('insp-fan-out');
+    const inspFanIn = document.getElementById('insp-fan-in');
+    const inspOutgoing = document.getElementById('insp-outgoing');
+    const inspIncoming = document.getElementById('insp-incoming');
+    const inspClose = document.getElementById('insp-close');
+
+    function showNodeInspector(nodeId) {
+      const nodeObj = graphData.nodes.find(n => n.id === nodeId);
+      if (!nodeObj) return;
+
+      const outgoing = graphData.edges.filter(e => e.from === nodeId).map(e => e.to);
+      const incoming = graphData.edges.filter(e => e.to === nodeId).map(e => e.from);
+
+      inspBadge.innerText = nodeObj.type;
+      inspBadge.style.backgroundColor = colorMap[nodeObj.group].background;
+      inspBadge.style.color = "#fff";
+      inspTitle.innerText = nodeObj.label;
+      inspDesc.innerText = nodeObj.role;
+      inspFanOut.innerText = outgoing.length;
+      inspFanIn.innerText = incoming.length;
+
+      inspOutgoing.innerHTML = outgoing.length === 0 ? '<li style="color:var(--text-muted);font-size:12px;">None (Leaf / Base Utility)</li>' :
+        outgoing.map(targetId => {
+          const target = graphData.nodes.find(n => n.id === targetId);
+          return `<li class="dep-item" onclick="focusNode('${targetId}')">
+                    <span>${target ? target.label : targetId}</span>
+                    <span class="dep-pill">${target ? target.group : 'pkg'}</span>
+                  </li>`;
+        }).join('');
+
+      inspIncoming.innerHTML = incoming.length === 0 ? '<li style="color:var(--text-muted);font-size:12px;">None (Entrypoint / Root)</li>' :
+        incoming.map(sourceId => {
+          const src = graphData.nodes.find(n => n.id === sourceId);
+          return `<li class="dep-item" onclick="focusNode('${sourceId}')">
+                    <span>${src ? src.label : sourceId}</span>
+                    <span class="dep-pill">${src ? src.group : 'module'}</span>
+                  </li>`;
+        }).join('');
+
+      inspector.style.display = 'flex';
+    }
+
+    function focusNode(nodeId) {
+      network.selectNodes([nodeId]);
+      showNodeInspector(nodeId);
+      network.focus(nodeId, { scale: 1.2, animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+    }
+
+    window.focusNode = focusNode;
+
+    network.on('click', params => {
+      if (params.nodes.length > 0) {
+        showNodeInspector(params.nodes[0]);
+      } else {
+        inspector.style.display = 'none';
+      }
+    });
+
+    inspClose.addEventListener('click', () => {
+      inspector.style.display = 'none';
+    });
+
+    // Filtering
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.getAttribute('data-group');
+
+        visNodes.forEach(node => {
+          let visible = true;
+          if (filter === 'internal') visible = node.originalGroup !== 'external';
+          else if (filter === 'external') visible = node.originalGroup === 'external';
+          else if (filter !== 'all') visible = node.originalGroup === filter;
+          visNodes.update({ id: node.id, hidden: !visible });
+        });
+        network.fit();
+      });
+    });
+
+    // Legend item clicks filter as well
+    document.querySelectorAll('.legend-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const group = item.getAttribute('data-group');
+        const targetBtn = document.querySelector(`.filter-btn[data-group="${group}"]`);
+        if (targetBtn) targetBtn.click();
+      });
+    });
+
+    // Search Box
+    const searchInput = document.getElementById('node-search');
+    searchInput.addEventListener('input', e => {
+      const q = e.target.value.toLowerCase().trim();
+      if (!q) {
+        network.unselectAll();
+        return;
+      }
+      const match = graphData.nodes.find(n => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q));
+      if (match) {
+        focusNode(match.id);
+      }
+    });
+
+    // Layout Toggle
+    const layoutBtn = document.getElementById('toggle-layout');
+    layoutBtn.addEventListener('click', () => {
+      isHierarchical = !isHierarchical;
+      layoutBtn.innerText = isHierarchical ? 'Force-Directed View' : 'Hierarchical View';
+      network.setOptions(getOptions(isHierarchical));
+      setTimeout(() => network.fit(), 300);
+    });
+
+    // Zoom Controls
+    document.getElementById('zoom-in').addEventListener('click', () => {
+      const scale = network.getScale() * 1.3;
+      network.moveTo({ scale: scale, animation: { duration: 300 } });
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+      const scale = network.getScale() * 0.7;
+      network.moveTo({ scale: scale, animation: { duration: 300 } });
+    });
+    document.getElementById('zoom-fit').addEventListener('click', () => {
+      network.fit({ animation: { duration: 400 } });
+    });
+    document.getElementById('reset-focus').addEventListener('click', () => {
+      document.querySelector('.filter-btn[data-group="all"]').click();
+      inspector.style.display = 'none';
+      network.unselectAll();
+      network.fit({ animation: { duration: 400 } });
+    });
+  </script>
+</body>
+</html>
