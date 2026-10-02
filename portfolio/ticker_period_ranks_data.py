@@ -88,7 +88,7 @@ def get_date_for_ndays(ndays):
 def get_mdbdate_from_strdate(strDate):
     return datetime.strptime(strDate, '%Y-%m-%d')
 
-def get_df_from_mdb_for_nday(ndays, coll_name, tickers='', incl='', dateidx=True):
+def get_df_from_mdb_for_nday(ndays, tickers='', incl='', dateidx=True):
     date_str = get_busdate_ndays_ago(ndays)
     if len(incl) != 0:
         tickers = get_tickers(incl)
