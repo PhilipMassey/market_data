@@ -51,3 +51,60 @@ def get_close_price_records(ltickers: List[str], dates: List[str]) -> List[Dict[
             
     # Return as list of wide dictionaries, sorted by Date chronologically
     return sorted(list(results_by_date.values()), key=lambda x: x["Date"])
+
+
+def get_latest_price(symbol: str, conn_fn=None) -> float:
+    """Returns the most recent close price for `symbol` from `market_data_close`."""
+    _get_conn = conn_fn or get_sqlite_conn
+    with _get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT close_price 
+            FROM market_data_close 
+            WHERE ticker = ? 
+            ORDER BY date DESC LIMIT 1
+        """, (symbol,))
+        row = cursor.fetchone()
+        if row is not None:
+            return float(row[0])
+    return None
+
+
+def get_price_at_date(symbol: str, date_str: str, conn_fn=None) -> float:
+    """Returns the latest close price for `symbol` on or before `date_str`."""
+    _get_conn = conn_fn or get_sqlite_conn
+    with _get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT close_price 
+            FROM market_data_close 
+            WHERE ticker = ? AND date <= ? 
+            ORDER BY date DESC LIMIT 1
+        """, (symbol, date_str))
+        row = cursor.fetchone()
+        if row is not None:
+            return float(row[0])
+    return None
+
+
+def get_latest_snapshot_date_on_or_before(date_str: str, conn_fn=None) -> str:
+    """Returns the latest `fidelity_positions` snapshot date on or before `date_str`, falling back to MIN(date)."""
+    _get_conn = conn_fn or get_sqlite_conn
+    with _get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT MAX(date) 
+            FROM fidelity_positions 
+            WHERE date <= ?
+        """, (date_str,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            return row[0]
+
+        cursor.execute("SELECT MIN(date) FROM fidelity_positions")
+        row = cursor.fetchone()
+        if row and row[0]:
+            return row[0]
+
+    return date_str
+

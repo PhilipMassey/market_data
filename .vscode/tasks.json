@@ -38,6 +38,24 @@
             }
         },
         {
+            "label": "🐍 Process Seeking Alpha Exports",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "${workspaceFolder}/portfolio/load_seeking_alpha_exports.py"
+            ],
+            "options": {
+                "env": {
+                    "PYTHONPATH": "${workspaceFolder}"
+                }
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "📊 Update Ticker Metadata",
             "type": "shell",
             "command": "${workspaceFolder}/.venv/bin/python",

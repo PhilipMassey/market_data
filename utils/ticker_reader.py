@@ -124,6 +124,37 @@ def get_tickers(folder: str, portfolio: str = None) -> List[str]:
     else:
         return get_tickers_from_directory(folder)
 
+def get_symbols_for_dir_and_port(directory: str, portfolio: str = None) -> List[str]:
+    """
+    Returns sorted unique uppercase symbols for a given directory and optional portfolio name.
+    Supports both CSVs with a 'Symbol' column and headerless single-column CSVs.
+    """
+    if not portfolio:
+        return get_tickers_from_directory(directory)
+
+    file_path = os.path.join(TICKERS_ROOT_DIRECTORY, directory, f"{portfolio}.csv")
+    if not os.path.exists(file_path):
+        return []
+
+    try:
+        first_row = pd.read_csv(file_path, nrows=1)
+        if not first_row.empty and 'Symbol' in first_row.columns:
+            df = pd.read_csv(file_path)
+            tickers = df['Symbol'].dropna().astype(str).str.strip().str.upper().tolist()
+        else:
+            df = pd.read_csv(file_path, header=None)
+            tickers = df[0].dropna().astype(str).str.strip().str.upper().tolist()
+
+        for h in ['SYMBOL', 'TICKER']:
+            if h in tickers:
+                tickers.remove(h)
+
+        return sorted(list(set(tickers)))
+    except Exception as e:
+        print(f"Error reading tickers from {file_path}: {e}")
+        return []
+
+
 def get_all_tickers() -> List[str]:
     """
     Aggregates and deduplicates tickers from ALL configured sources.

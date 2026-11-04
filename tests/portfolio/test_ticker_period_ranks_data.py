@@ -77,10 +77,12 @@ def mock_sqlite_db():
     global_cache['df_all_periods'] = None
 
     with patch('portfolio.ticker_period_ranks_data.get_sqlite_conn', _get_conn), \
+         patch('utils.ticker_utils.get_sqlite_conn', _get_conn), \
          patch('database.database_utils.get_sqlite_conn', _get_conn), \
          patch('portfolio.portfolio_dashboard.get_sqlite_conn', _get_conn), \
          patch('portfolio.portfolio_dashboard.init_sqlite_db'), \
-         patch('portfolio.ticker_period_ranks_data.get_tickers', return_value=['AAPL', 'MSFT']):
+         patch('portfolio.ticker_period_ranks_data.get_tickers', return_value=['AAPL', 'MSFT']), \
+         patch('utils.ticker_utils.get_tickers', return_value=['AAPL', 'MSFT']):
         yield conn
     conn.close()
 

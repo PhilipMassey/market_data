@@ -1,80 +1,46 @@
 import os
+import numpy as np
 import pandas as pd
 from flask import Flask, render_template, jsonify, request
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
+from database.database_utils import (
+    get_latest_price as _get_latest_price,
+    get_price_at_date as _get_price_at_date,
+    get_latest_snapshot_date_on_or_before as _get_latest_snapshot_date_on_or_before,
+)
 from utils.calendar_utils import get_nyse_business_days_comparison
-from portfolio.ticker_period_ranks_data import get_all_periods_ranked
+from utils.portfolio_utils import is_cash
+from utils.ticker_utils import get_portfolio_dirs, get_portfolios_in_dir
+from utils.ticker_reader import get_symbols_for_dir_and_port
+from portfolio.ticker_period_ranks_data import (
+    get_all_periods_ranked,
+    filter_tickers_by_rank,
+    filter_by_sector_industry,
+    get_ticker_period_data,
+)
 
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
-def is_cash(symbol: str) -> bool:
-    if not symbol:
-        return False
-    sym = symbol.upper()
-    return sym.endswith('**') or sym in (
-        'FDIC-INSURED DEPOSIT SWEEP',
-        'PENDING ACTIVITY',
-        'FCASH',
-        'CASH',
-        'PENDING',
-        'MONEY MARKET'
-    )
 
 def get_latest_price(symbol: str) -> float:
-    with get_sqlite_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT close_price 
-            FROM market_data_close 
-            WHERE ticker = ? 
-            ORDER BY date DESC LIMIT 1
-        """, (symbol,))
-        row = cursor.fetchone()
-        if row is not None:
-            return float(row[0])
-    return None
+    return _get_latest_price(symbol, conn_fn=get_sqlite_conn)
+
 
 def get_price_at_date(symbol: str, date_str: str) -> float:
-    with get_sqlite_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT close_price 
-            FROM market_data_close 
-            WHERE ticker = ? AND date <= ? 
-            ORDER BY date DESC LIMIT 1
-        """, (symbol, date_str))
-        row = cursor.fetchone()
-        if row is not None:
-            return float(row[0])
-    return None
+    return _get_price_at_date(symbol, date_str, conn_fn=get_sqlite_conn)
+
 
 def get_latest_snapshot_date_on_or_before(date_str: str) -> str:
-    with get_sqlite_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT MAX(date) 
-            FROM fidelity_positions 
-            WHERE date <= ?
-        """, (date_str,))
-        row = cursor.fetchone()
-        if row and row[0]:
-            return row[0]
-            
-        # Fallback to the earliest snapshot date if none exists on or before
-        cursor.execute("SELECT MIN(date) FROM fidelity_positions")
-        row = cursor.fetchone()
-        if row and row[0]:
-            return row[0]
-            
-    return date_str
+    return _get_latest_snapshot_date_on_or_before(date_str, conn_fn=get_sqlite_conn)
+
 
 def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = False) -> dict:
     portfolio = {}
     cash_positions = []
-    
+
     snapshot_date = get_latest_snapshot_date_on_or_before(date_str)
-    
+
     with get_sqlite_conn() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -83,10 +49,10 @@ def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = Fals
             WHERE date = ?
         """, (snapshot_date,))
         rows = cursor.fetchall()
-        
+
     for row in rows:
         symbol, qty, avg_cost, total_cost, curr_val, acc_name, last_price, pct_acct = row
-        
+
         if is_cash(symbol):
             cash_positions.append({
                 'symbol': symbol,
@@ -100,21 +66,21 @@ def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = Fals
                 db_price = get_latest_price(symbol)
             else:
                 db_price = get_price_at_date(symbol, date_str)
-                
+
             if db_price is not None:
                 curr_price = db_price
                 price_source = 'db_close'
             else:
                 curr_price = last_price if last_price is not None else 1.0
                 price_source = 'fidelity_last_price'
-                
+
             qty_val = qty if qty is not None else 0.0
             dynamic_value = qty_val * curr_price
-            
+
             cost_basis_tot = total_cost if total_cost is not None else 0.0
             gain_loss_d = dynamic_value - cost_basis_tot
             gain_loss_p = (gain_loss_d / cost_basis_tot * 100) if cost_basis_tot > 0.0 else 0.0
-            
+
             portfolio[symbol] = {
                 'symbol': symbol,
                 'account_name': acc_name,
@@ -128,11 +94,11 @@ def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = Fals
                 'price_source': price_source,
                 'percent_of_account': pct_acct
             }
-            
+
     if cash_positions:
         total_cash_value = sum(p['current_value'] for p in cash_positions)
         mean_pct = sum(p['percent_of_account'] for p in cash_positions) / len(cash_positions)
-        
+
         portfolio['Money Market'] = {
             'symbol': 'Money Market',
             'account_name': 'Cash',
@@ -146,12 +112,14 @@ def fetch_portfolio_at_date(date_str: str, use_overall_latest_price: bool = Fals
             'price_source': 'fidelity_last_price',
             'percent_of_account': mean_pct
         }
-        
+
     return portfolio
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/data/portfolio')
 def api_portfolio():
@@ -161,22 +129,22 @@ def api_portfolio():
         cursor.execute("SELECT MAX(date) FROM fidelity_positions")
         row = cursor.fetchone()
         latest_date = row[0] if row else None
-        
+
     if not latest_date:
         return jsonify({'date': None, 'positions': [], 'totals': {}})
-        
+
     portfolio_dict = fetch_portfolio_at_date(latest_date, use_overall_latest_price=True)
     positions_list = list(portfolio_dict.values())
-    
+
     total_value = sum(p['dynamic_value'] for p in positions_list if p['dynamic_value'] is not None)
     total_cost = sum(p['cost_basis_total'] for p in positions_list if p['cost_basis_total'] is not None and not is_cash(p['symbol']))
-    
+
     total_gain_dollar = total_value - total_cost
     total_gain_percent = (total_gain_dollar / total_cost * 100) if total_cost > 0.0 else 0.0
-    
+
     cash_value = sum(p['dynamic_value'] for p in positions_list if is_cash(p['symbol']))
     equity_value = sum(p['dynamic_value'] for p in positions_list if not is_cash(p['symbol']))
-    
+
     totals = {
         'total_value': total_value,
         'total_cost': total_cost,
@@ -185,17 +153,19 @@ def api_portfolio():
         'cash_value': cash_value,
         'equity_value': equity_value
     }
-    
+
     return jsonify({
         'date': latest_date,
         'positions': positions_list,
         'totals': totals
     })
 
+
 @app.route('/data/business-days')
 def api_business_days():
     days = get_nyse_business_days_comparison()
     return jsonify(days)
+
 
 @app.route('/data/snapshot-dates')
 def api_snapshot_dates():
@@ -206,6 +176,7 @@ def api_snapshot_dates():
         dates = [row[0] for row in cursor.fetchall()]
     return jsonify(dates)
 
+
 @app.route('/data/compare')
 def api_compare():
     init_sqlite_db()
@@ -215,9 +186,9 @@ def api_compare():
     filter_portfolio = request.args.get('portfolio')
     filter_sector = request.args.get('sector')
     filter_industry = request.args.get('industry')
-    
+
     business_days = get_nyse_business_days_comparison()
-    
+
     if not start_date or not end_date:
         if len(business_days) >= 2:
             if not end_date:
@@ -233,13 +204,13 @@ def api_compare():
                     start_date = min_d
                 if not end_date:
                     end_date = max_d
-                    
+
     if not start_date or not end_date:
         return jsonify({'error': 'No dates available'}), 400
-        
+
     start_portfolio = fetch_portfolio_at_date(start_date)
     end_portfolio = fetch_portfolio_at_date(end_date)
-    
+
     # Lookup sector & industry metadata from ticker_meta_profile
     meta_map = {}
     with get_sqlite_conn() as conn:
@@ -253,17 +224,17 @@ def api_compare():
 
     compare_positions = []
     common_symbols = set(start_portfolio.keys()).intersection(set(end_portfolio.keys()))
-    
+
     for symbol in common_symbols:
         start_pos = start_portfolio[symbol]
         end_pos = end_portfolio[symbol]
-        
+
         s_val = start_pos['dynamic_value'] or 0.0
         e_val = end_pos['dynamic_value'] or 0.0
-        
+
         if s_val == 0.0 or e_val == 0.0:
             continue
-            
+
         if is_cash(symbol) or symbol == 'Money Market':
             c_dollar = 0.0
             c_percent = 0.0
@@ -278,11 +249,11 @@ def api_compare():
             meta = meta_map.get(symbol.upper(), {})
             sector = meta.get('sector', 'Unknown')
             industry = meta.get('industry', 'Unknown')
-            
+
         s_qty = start_pos['quantity']
         e_qty = end_pos['quantity']
         qty_change = (e_qty - s_qty) if (s_qty is not None and e_qty is not None) else None
-        
+
         compare_positions.append({
             'symbol': symbol,
             'account_name': end_pos['account_name'] or start_pos['account_name'],
@@ -407,7 +378,7 @@ def api_compare():
             'weight_percent': weight_pct
         })
     sector_totals.sort(key=lambda x: x['end_value'], reverse=True)
-        
+
     return jsonify({
         'start_date': start_date,
         'end_date': end_date,
@@ -417,67 +388,23 @@ def api_compare():
         'totals': totals
     })
 
-def get_portfolio_dirs() -> list:
-    from utils.ticker_reader import TICKERS_ROOT_DIRECTORY
-    if not os.path.exists(TICKERS_ROOT_DIRECTORY):
-        return []
-    return sorted(d for d in os.listdir(TICKERS_ROOT_DIRECTORY) 
-                  if os.path.isdir(os.path.join(TICKERS_ROOT_DIRECTORY, d)))
-
-def get_portfolios_in_dir(directory: str) -> list:
-    from utils.ticker_reader import TICKERS_ROOT_DIRECTORY
-    target_dir = os.path.join(TICKERS_ROOT_DIRECTORY, directory)
-    if not os.path.exists(target_dir):
-        return []
-    import glob
-    csv_files = glob.glob(os.path.join(target_dir, "*.csv"))
-    portfolios = [os.path.splitext(os.path.basename(f))[0] for f in csv_files]
-    return sorted(portfolios)
-
-def get_symbols_for_dir_and_port(directory: str, portfolio: str = None) -> list:
-    from utils.ticker_reader import TICKERS_ROOT_DIRECTORY
-    if not portfolio:
-        from utils.ticker_reader import get_tickers_from_directory
-        return get_tickers_from_directory(directory)
-    
-    file_path = os.path.join(TICKERS_ROOT_DIRECTORY, directory, f"{portfolio}.csv")
-    if not os.path.exists(file_path):
-        return []
-        
-    try:
-        first_row = pd.read_csv(file_path, nrows=1)
-        if not first_row.empty and 'Symbol' in first_row.columns:
-            df = pd.read_csv(file_path)
-            tickers = df['Symbol'].dropna().astype(str).str.strip().str.upper().tolist()
-        else:
-            df = pd.read_csv(file_path, header=None)
-            tickers = df[0].dropna().astype(str).str.strip().str.upper().tolist()
-            
-        for h in ['SYMBOL', 'TICKER']:
-            if h in tickers:
-                tickers.remove(h)
-                
-        return sorted(list(set(tickers)))
-    except Exception as e:
-        print(f"Error reading tickers from {file_path}: {e}")
-        return []
 
 @app.route('/data/ticker-ranks/options')
 def api_ticker_ranks_options():
     init_sqlite_db()
-    
+
     directory = request.args.get('directory')
     portfolio = request.args.get('portfolio')
-    
+
     if directory or portfolio:
         from utils.ticker_reader import get_tickers
         active_tickers = get_tickers(directory or 'ALL_FOLDERS', portfolio if portfolio else None)
     else:
         from utils.ticker_reader import get_tickers_from_directory
         active_tickers = get_tickers_from_directory('ALL_FOLDERS')
-        
+
     active_tickers = [t.upper() for t in active_tickers if t]
-    
+
     sectors_industries = {}
     with get_sqlite_conn() as conn:
         cursor = conn.cursor()
@@ -495,7 +422,7 @@ def api_ticker_ranks_options():
                 FROM ticker_meta_profile 
                 WHERE sector IS NOT NULL AND industry IS NOT NULL
             """)
-            
+
         for row in cursor.fetchall():
             sec, ind = row
             if not sec or sec == 'Unknown':
@@ -504,94 +431,79 @@ def api_ticker_ranks_options():
                 sectors_industries[sec] = []
             if ind and ind != 'Unknown' and ind not in sectors_industries[sec]:
                 sectors_industries[sec].append(ind)
-                
+
     sorted_sectors_industries = {sec: sorted(inds) for sec, inds in sorted(sectors_industries.items()) if inds or sec}
-    
+
     directories = get_portfolio_dirs()
     dirs_portfolios = {d: get_portfolios_in_dir(d) for d in directories}
-    
+
     return jsonify({
         'sectors_industries': sorted_sectors_industries,
         'dirs_portfolios': dirs_portfolios
     })
 
+
 @app.route('/data/ticker-ranks')
 def api_ticker_ranks():
     init_sqlite_db()
-    
+
     sector = request.args.get('sector')
     industry = request.args.get('industry')
     period = request.args.get('period', '1 Month')
     directory = request.args.get('directory')
     port = request.args.get('portfolio')
     rank_filter = request.args.get('rank_filter', type=int)
-    
-    df_all = get_all_periods_ranked()
+    daily_step_raw = request.args.get('daily_step', 'true').lower()
+    daily_step = daily_step_raw in ('true', '1', 'yes')
+
+    df_all = get_all_periods_ranked(daily_step=daily_step)
     if df_all.empty:
         return jsonify([])
-        
+
     if directory:
         tickers = get_symbols_for_dir_and_port(directory, port)
         df_all = df_all[df_all['ticker'].isin(tickers)]
-        
-    if rank_filter is not None:
-        df_all_filtered = df_all[df_all['risk_reward_rank'] <= rank_filter]
-    else:
-        df_all_filtered = df_all.copy()
-        
-    ticker_period_counts = df_all_filtered.groupby('ticker').size()
-    valid_tickers = ticker_period_counts[ticker_period_counts >= 4].index.tolist()
-    
-    df_all = df_all[df_all['ticker'].isin(valid_tickers)]
-    if rank_filter is not None:
-        df_all = df_all[df_all['risk_reward_rank'] <= rank_filter]
-        
+
+    df_all = filter_tickers_by_rank(df_all, rank_filter, min_periods=4)
     df_period = df_all[df_all['Period'] == period]
-    
-    if sector:
-        df_period = df_period[df_period['sector'] == sector]
-    if industry:
-        df_period = df_period[df_period['industry'] == industry]
-        
+    df_period = filter_by_sector_industry(df_period, sector, industry)
     df_period = df_period.sort_values(by=['risk_reward_rank', 'sector', 'industry', 'ticker'])
-    
-    import numpy as np
+
     df_period = df_period.replace({np.nan: None})
     records = df_period.to_dict(orient='records')
     return jsonify(records)
+
 
 @app.route('/data/ticker-ranks/detail')
 def api_ticker_ranks_detail():
     init_sqlite_db()
     ticker = request.args.get('ticker')
     rank_filter = request.args.get('rank_filter', type=int)
-    
+    daily_step_raw = request.args.get('daily_step', 'true').lower()
+    daily_step = daily_step_raw in ('true', '1', 'yes')
+
     if not ticker:
         return jsonify({'error': 'Ticker is required'}), 400
-        
-    df_all = get_all_periods_ranked()
+
+    df_all = get_all_periods_ranked(daily_step=daily_step)
     if df_all.empty:
         return jsonify([])
-        
-    df_tick = df_all[df_all['ticker'] == ticker.upper()].copy()
+
+    df_tick = get_ticker_period_data(df_all, ticker.upper(), rank_filter_value=rank_filter)
     if df_tick.empty:
         return jsonify([])
-        
-    if rank_filter is not None:
-        df_tick = df_tick[df_tick['risk_reward_rank'] <= rank_filter]
-        
+
     period_order = {'Daily': 1, '1 Week': 2, '2 Weeks': 3, '1 Month': 4, '2 Months': 5}
     df_tick['order'] = df_tick['Period'].map(period_order)
     df_tick.sort_values('order', inplace=True)
     df_tick.drop(columns=['order'], inplace=True)
-    
-    import numpy as np
+
     df_tick = df_tick.replace({np.nan: None})
     records = df_tick.to_dict(orient='records')
     return jsonify(records)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     init_sqlite_db()
     # Force auto-reload to refresh all HTML templates and static assets (v1.0.5)
     port = int(os.environ.get('PORT', 5001))

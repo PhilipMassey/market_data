@@ -14,15 +14,21 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
-from portfolio.holding_portfolios_update import (
-    df_fidelity_positions_aggregate_columns,
-    extract_date_from_filename
+from portfolio.holding_portfolios_update import df_fidelity_positions_aggregate_columns
+from utils.portfolio_utils import (
+    PORTFOLIOS,
+    SERVICE_ACCOUNT_FILE,
+    extract_date_from_filename,
+    get_latest_fidelity_csv,
+    get_gspread_client,
+    worksheet_update_with_df as _worksheet_update_with_df,
+    normalize_fidelity_columns,
+    filter_out_cash_symbols,
+    map_account_name,
+    clean_numeric_columns,
 )
 
 PORTFOLIO_ADJUSTMENTS_URL = "https://docs.google.com/spreadsheets/d/1bTsH3cjQDGR-Mlnq-bypRqhGIHJApKKJgsgXWSemur4/edit#gid=0"
-SERVICE_ACCOUNT_FILE = os.path.expanduser("~/.config/gspread/service_account.json")
-
-PORTFOLIOS = ['Dividends', 'ETFs', 'International', 'Shorts', 'Stocks']
 
 DCT_ADJUSTMENT_ID = {
     'Alpha Picks': 0,
@@ -38,15 +44,6 @@ DCT_ADJUSTMENT_ID = {
 }
 
 
-def get_gspread_client(credentials_file: str = SERVICE_ACCOUNT_FILE) -> gspread.Client:
-    """
-    Initializes and returns a Google Sheets API client using service account credentials.
-    """
-    if not os.path.exists(credentials_file):
-        raise FileNotFoundError(f"Google service account file not found at: {credentials_file}")
-    return gspread.service_account(filename=credentials_file)
-
-
 def worksheet_update_with_df(
     gc: gspread.Client,
     workbook_url: str,
@@ -58,29 +55,14 @@ def worksheet_update_with_df(
     Updates a specific Google Worksheet by ID with the given DataFrame.
     Preserves existing formatting and formulas at or below row 70 by clearing only A1:Z69.
     """
-    workbook = gc.open_by_url(workbook_url)
-    worksheet = workbook.get_worksheet_by_id(worksheet_id)
-    # Clear old data range above the formula row (row 70) while preserving formatting
-    worksheet.batch_clear([clear_range])
-    result = set_with_dataframe(worksheet, df, row=1, col=1, include_index=False, include_column_header=True)
-    print(f"\tUpdated worksheet '{worksheet.title}' (ID {worksheet_id}) with {len(df)} rows.")
-    return result
-
-
-def get_latest_fidelity_csv(downloads_dir: Optional[str] = None) -> Tuple[str, str]:
-    """
-    Finds the most recent Portfolio_Positions_*.csv file in the downloads directory.
-    Returns (date_str, file_path).
-    """
-    if downloads_dir is None:
-        downloads_dir = os.path.expanduser('~/Downloads')
-    search_pattern = os.path.join(downloads_dir, 'Portfolio_Positions_*.csv')
-    files = glob.glob(search_pattern)
-    if not files:
-        raise FileNotFoundError(f"No Portfolio_Positions_*.csv files found in: {downloads_dir}")
-    latest_file = sorted(files)[-1]
-    date_str = extract_date_from_filename(latest_file)
-    return date_str, latest_file
+    return _worksheet_update_with_df(
+        gc,
+        workbook_url,
+        worksheet_id,
+        df,
+        clear_range=clear_range,
+        set_df_fn=set_with_dataframe,
+    )
 
 
 def df_fidelity_positions_portfolio(file_path: Optional[str] = None) -> Tuple[str, pd.DataFrame]:
@@ -103,35 +85,18 @@ def df_clean_fidelity_for_worksheet(df: pd.DataFrame) -> pd.DataFrame:
     Cleans raw Fidelity CSV export data and aggregates by Symbol across all accounts
     for the 'Fidelity Positions' worksheet.
     """
-    df = df.copy()
+    df = normalize_fidelity_columns(df.copy())
 
-    # Column name mapping
-    column_mapping = {
-        'Account name': 'Account Name',
-        'Account number': 'Account Number',
-        'Current value': 'Current Value',
-        'Cost basis total': 'Cost Basis Total',
-        'Average cost basis': 'Average Cost Basis',
-        'Last price': 'Last Price',
-        'Percent of account': 'Percent Of Account',
-    }
-    df.rename(columns=column_mapping, inplace=True)
-
-    # Filter invalid symbols and cash/pending
     if 'Symbol' not in df.columns:
         return pd.DataFrame()
 
-    df = df.dropna(subset=['Symbol'])
-    df['Symbol'] = df['Symbol'].astype(str).str.strip()
-    df = df[df['Symbol'] != '']
-    df = df[~df['Symbol'].str.endswith('**')]
-    df = df[~df['Symbol'].str.upper().isin(['PENDING ACTIVITY', 'PENDING', 'FCASH', 'CASH'])]
+    df = filter_out_cash_symbols(df, 'Symbol')
 
-    # Clean numeric columns
-    for col in ['Current Value', 'Cost Basis Total', 'Average Cost Basis', 'Quantity']:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.strip()
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+    clean_numeric_columns(
+        df,
+        dollar_cols=['Current Value', 'Cost Basis Total', 'Average Cost Basis'],
+        numeric_cols=['Quantity'],
+    )
 
     if 'Quantity' not in df.columns:
         df['Quantity'] = 0.0
@@ -190,46 +155,14 @@ def df_fidelity_portfolios(file_path: Optional[str] = None) -> pd.DataFrame:
         a_date, fidelity_df = df_fidelity_positions_portfolio(file_path)
         print(f"Loaded Fidelity positions directly from CSV ({a_date}).")
 
-        # Normalize column names to Title Case for aggregation
-        column_mapping = {
-            'Account name': 'Account Name',
-            'Account number': 'Account Number',
-            'Current value': 'Current Value',
-            'Cost basis total': 'Cost Basis Total',
-            'Average cost basis': 'Average Cost Basis',
-            'Last price': 'Last Price',
-            'Percent of account': 'Percent Of Account',
-        }
-        fidelity_df.rename(columns=column_mapping, inplace=True)
-
-        # Filter cash and pending entries
-        fidelity_df = fidelity_df.dropna(subset=['Symbol'])
-        fidelity_df['Symbol'] = fidelity_df['Symbol'].astype(str).str.strip()
-        fidelity_df = fidelity_df[fidelity_df['Symbol'] != '']
-        fidelity_df = fidelity_df[~fidelity_df['Symbol'].str.endswith('**')]
-        fidelity_df = fidelity_df[~fidelity_df['Symbol'].str.upper().isin(['PENDING ACTIVITY', 'PENDING', 'FCASH', 'CASH'])]
-
-        # Map Account Name to standard portfolio categories
-        def map_account_name(name: str) -> str:
-            if 'Stocks' in name:
-                return 'Stocks'
-            if 'Dividends' in name:
-                return 'Dividends'
-            if 'ETFs' in name:
-                return 'ETFs'
-            if 'International' in name:
-                return 'International'
-            if 'Shorts' in name:
-                return 'Shorts'
-            return name
-
+        normalize_fidelity_columns(fidelity_df, inplace=True)
+        fidelity_df = filter_out_cash_symbols(fidelity_df, 'Symbol')
         fidelity_df['Account Name'] = fidelity_df['Account Name'].astype(str).apply(map_account_name)
 
-        # Clean numeric columns
-        for col in ['Current Value', 'Cost Basis Total', 'Average Cost Basis', 'Last Price']:
-            if col in fidelity_df.columns:
-                fidelity_df[col] = fidelity_df[col].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.strip()
-                fidelity_df[col] = pd.to_numeric(fidelity_df[col], errors='coerce')
+        clean_numeric_columns(
+            fidelity_df,
+            dollar_cols=['Current Value', 'Cost Basis Total', 'Average Cost Basis', 'Last Price'],
+        )
 
         # Group by Account Name and Symbol to preserve holdings per account
         agg_df = fidelity_df.groupby(['Account Name', 'Symbol']).agg({
@@ -266,16 +199,8 @@ def df_fidelity_portfolios(file_path: Optional[str] = None) -> pd.DataFrame:
                     WHERE date = (SELECT MAX(date) FROM fidelity_positions)
                 """, conn)
 
-                # Filter out cash, sweep, and pending entries
-                df = df[~df['Symbol'].str.endswith('**')]
-                df = df[~df['Symbol'].str.upper().isin(['PENDING ACTIVITY', 'PENDING', 'FCASH', 'CASH'])]
-
-                # Map account names to standard portfolio names
-                df['Account name'] = df['Account name'].replace(['X Stocks', 'Stocks'], 'Stocks')
-                df['Account name'] = df['Account name'].replace(['Z Dividends', 'Dividends'], 'Dividends')
-                df['Account name'] = df['Account name'].replace(['Z ETFs', 'ETFs Roth'], 'ETFs')
-                df['Account name'] = df['Account name'].replace(['Z Shorts', 'Shorts'], 'Shorts')
-                df['Account name'] = df['Account name'].replace(['International'], 'International')
+                df = filter_out_cash_symbols(df, 'Symbol')
+                df['Account name'] = df['Account name'].astype(str).apply(map_account_name)
                 return df
         raise FileNotFoundError(f"Could not load Fidelity positions from CSV or SQLite: {e}")
 

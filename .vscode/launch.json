@@ -24,6 +24,16 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Run: Process Seeking Alpha Exports",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/portfolio/load_seeking_alpha_exports.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Run: Load Missing Prices",
             "type": "debugpy",
             "request": "launch",

@@ -56,6 +56,7 @@ const state = {
         sector: '',
         industry: '',
         rankFilter: 100,
+        dailyStep: true,
         pageSize: 15,
         currentPage: 1,
         sortBy: 'risk_reward_rank',
@@ -1212,6 +1213,16 @@ function initToolbarControls() {
         loadRanksData();
     });
 
+    // Ranks Step Mode radio buttons
+    const stepRadios = document.querySelectorAll('input[name="rank-daily-step"]');
+    stepRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            state.ranks.dailyStep = e.target.value === 'true';
+            state.ranks.currentPage = 1;
+            loadRanksData();
+        });
+    });
+
     // Detail Panel close button click
     const btnCloseDetail = document.getElementById('btn-close-detail');
     btnCloseDetail.addEventListener('click', () => {
@@ -1493,7 +1504,7 @@ function populateRanksIndustries(sector) {
 async function loadRanksData() {
     showLoading(true);
     try {
-        let url = `/data/ticker-ranks?period=${state.ranks.period}`;
+        let url = `/data/ticker-ranks?period=${state.ranks.period}&daily_step=${state.ranks.dailyStep}`;
         if (state.ranks.directory) url += `&directory=${state.ranks.directory}`;
         if (state.ranks.portfolio) url += `&portfolio=${state.ranks.portfolio}`;
         if (state.ranks.sector) url += `&sector=${encodeURIComponent(state.ranks.sector)}`;
@@ -1653,7 +1664,7 @@ async function showRanksDetail(ticker) {
     container.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;"><div class="spinner"></div></td></tr>';
     
     try {
-        let url = `/data/ticker-ranks/detail?ticker=${ticker}`;
+        let url = `/data/ticker-ranks/detail?ticker=${ticker}&daily_step=${state.ranks.dailyStep}`;
         if (state.ranks.rankFilter < 100) url += `&rank_filter=${state.ranks.rankFilter}`;
         
         const res = await fetch(url);

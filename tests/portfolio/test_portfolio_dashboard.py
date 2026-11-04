@@ -436,6 +436,46 @@ def test_api_ticker_ranks_options_filtering(mock_sqlite_db):
         assert 'Financials' not in data['sectors_industries']
 
 
+@patch('portfolio.portfolio_dashboard.get_all_periods_ranked')
+def test_api_ticker_ranks_daily_step(mock_get_ranked, mock_sqlite_db):
+    import pandas as pd
+    rows = []
+    for period in ['Daily', '1 Week', '2 Weeks', '1 Month', '2 Months']:
+        rows.append({
+            'ticker': 'AAPL', 'sector': 'Technology', 'industry': 'Consumer Electronics',
+            'Period': period, 'risk_reward_rank': 1, 'over_pc': 2.5
+        })
+    mock_get_ranked.return_value = pd.DataFrame(rows)
+
+    client = app.test_client()
+
+    # 1. Default daily_step should be True
+    resp = client.get('/data/ticker-ranks?period=Daily')
+    assert resp.status_code == 200
+    mock_get_ranked.assert_called_with(daily_step=True)
+
+    # 2. Explicit daily_step=false
+    resp = client.get('/data/ticker-ranks?period=Daily&daily_step=false')
+    assert resp.status_code == 200
+    mock_get_ranked.assert_called_with(daily_step=False)
+
+    # 3. Explicit daily_step=true
+    resp = client.get('/data/ticker-ranks?period=Daily&daily_step=true')
+    assert resp.status_code == 200
+    mock_get_ranked.assert_called_with(daily_step=True)
+
+    # 4. Detail endpoint default daily_step
+    resp = client.get('/data/ticker-ranks/detail?ticker=AAPL')
+    assert resp.status_code == 200
+    mock_get_ranked.assert_called_with(daily_step=True)
+
+    # 5. Detail endpoint explicit daily_step=false
+    resp = client.get('/data/ticker-ranks/detail?ticker=AAPL&daily_step=false')
+    assert resp.status_code == 200
+    mock_get_ranked.assert_called_with(daily_step=False)
+
+
+
 
 
 

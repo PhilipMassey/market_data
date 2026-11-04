@@ -337,7 +337,7 @@ def test_compare_holdings_and_write_mismatches_perfect_match():
             compare_holdings_and_write_mismatches()
 
         output = f.getvalue()
-        assert "fidelity extras  set()" in output
-        assert "seeking extras  set()" in output
+        assert "fidelity extras  []" in output
+        assert "seeking extras  []" in output
 
 
