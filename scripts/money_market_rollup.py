@@ -5,10 +5,6 @@ import glob
 from os.path import join
 from datetime import datetime
 import pandas as pd
-# Ensure project root is in sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 download_dir = os.environ.get('DOWNLOAD_DIR')
 
 def fidelity_positions_filep():

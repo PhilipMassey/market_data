@@ -1,12 +1,5 @@
-import os
-import sys
 import time
 import yfinance as yf
-
-# Ensure project root is in sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
 from portfolio.ticker_period_ranks_data import clear_cache

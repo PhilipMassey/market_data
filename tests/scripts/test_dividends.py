@@ -4,11 +4,6 @@ import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
 
-# Ensure project root is in sys.path
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
 from scripts.dividends import (
     df_sum_symbol_div_amount,
     df_ungroup_symbol_div_amount,

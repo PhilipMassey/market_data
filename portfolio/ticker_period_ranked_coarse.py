@@ -6,11 +6,6 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 import numpy as np
 
-# Add project root to sys.path to enable imports if run as a script
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 from utils.calendar_utils import (
     get_ndays_periods,
     get_nbusdays_from_date,

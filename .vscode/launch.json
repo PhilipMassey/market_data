@@ -14,14 +14,20 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/scripts/cleanup.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         },
         {
             "name": "Run: Load Holding Portfolios",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/portfolio/load_holding_portfolios.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         },
         {
             "name": "Run: Process Seeking Alpha Exports",
@@ -38,7 +44,10 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/stock_mdb/load_missing.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         },
         {
             "name": "Run: Update Ticker Metadata",

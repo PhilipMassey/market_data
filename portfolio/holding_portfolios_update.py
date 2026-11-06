@@ -7,12 +7,8 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-# Ensure project root is in path for imports
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
+from utils.ticker_reader import PROJECT_ROOT_DIRECTORY as project_root
 from utils.portfolio_utils import (
     PORTFOLIOS,
     extract_date_from_filename,

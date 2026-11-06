@@ -1,11 +1,3 @@
-import os
-import sys
-
-# Ensure project root is in sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
 from utils.ticker_reader import get_all_tickers
 from portfolio.ticker_period_ranks_data import clear_cache

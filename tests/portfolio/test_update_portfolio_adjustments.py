@@ -5,11 +5,6 @@ import pandas as pd
 import numpy as np
 from unittest.mock import MagicMock, patch
 
-# Ensure project root is in sys.path
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
 from portfolio.update_portfolio_adjustments import (
     df_fidelity_portfolios,
     df_clean_fidelity_for_worksheet,

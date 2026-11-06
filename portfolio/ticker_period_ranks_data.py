@@ -8,12 +8,6 @@ from os import listdir
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
-# Add project root to sys.path to enable imports if run as a script
-import sys
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 from database.sqlite_connection import get_sqlite_conn
 from database.database_utils import get_close_price_records
 
