@@ -260,6 +260,7 @@ def get_all_periods_ranked(daily_step=True):
 
         # Add period metadata
         df_all['Period'] = period_name
+        df_all['date'] = get_busdate_ndays_ago(ndays_range[-1])
         date_newest = get_date_for_ndays(ndays_range[-1])
         date_oldest = get_date_for_ndays(ndays_range[0])
         df_all['Date Range'] = f"{date_oldest} to {date_newest}"

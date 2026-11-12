@@ -128,8 +128,13 @@ def test_process_fidelity_export(mock_sqlite_db, tmp_path):
     mock_sqlite_db.commit()
 
     # Process
-    with patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)):
+    with patch('portfolio.holding_portfolios_update.project_root', str(tmp_path)), \
+         patch('portfolio.update_portfolio_adjustments.get_gspread_client') as mock_gc, \
+         patch('portfolio.update_portfolio_adjustments.update_fidelity_positions_worksheet') as mock_update_pos, \
+         patch('portfolio.update_portfolio_adjustments.adjustments_update_fidelity_percentages') as mock_update_pct:
         process_fidelity_export(str(csv_file))
+        mock_update_pos.assert_called_once()
+        mock_update_pct.assert_called_once()
 
     # Read from in-memory SQLite and check database insertions
     cursor.execute("SELECT symbol FROM fidelity_positions ORDER BY symbol")

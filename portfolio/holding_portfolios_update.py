@@ -30,7 +30,11 @@ def df_fidelity_positions_aggregate_columns(df: pd.DataFrame) -> pd.DataFrame:
     df['Symbol'] = df['Symbol'].astype(str).str.strip()
     df = df[df['Symbol'] != '']
 
-    # 2. Clean dollar, percentage, and numeric columns
+    # 2. Ensure expected columns exist and clean dollar, percentage, and numeric columns
+    for col in ['Current Value', 'Cost Basis Total', 'Average Cost Basis', 'Last Price', 'Percent Of Account', 'Quantity']:
+        if col not in df.columns:
+            df[col] = np.nan
+
     clean_numeric_columns(
         df,
         dollar_cols=['Current Value', 'Cost Basis Total', 'Average Cost Basis', 'Last Price'],
@@ -276,6 +280,23 @@ def process_fidelity_export(file_path: str):
         print(f"Successfully inserted {len(rows_to_insert)} records into SQLite fidelity_positions table for date {date_str}.")
     except Exception as e:
         raise RuntimeError(f"Error inserting into SQLite: {e}")
+
+    # 7. Update Google Sheets ('Fidelity Positions' worksheet and portfolio percentage worksheets)
+    try:
+        from portfolio.update_portfolio_adjustments import (
+            get_gspread_client,
+            update_fidelity_positions_worksheet,
+            df_fidelity_portfolios,
+            adjustments_update_fidelity_percentages,
+            PORTFOLIO_ADJUSTMENTS_URL,
+        )
+        gc = get_gspread_client()
+        update_fidelity_positions_worksheet(df, workbook_url=PORTFOLIO_ADJUSTMENTS_URL, gc=gc)
+        fidelity_portfolios_df = df_fidelity_portfolios(file_path)
+        adjustments_update_fidelity_percentages(fidelity_portfolios_df, workbook_url=PORTFOLIO_ADJUSTMENTS_URL, gc=gc)
+        print("Successfully updated Google Sheets Portfolio Adjustments.")
+    except Exception as e:
+        print(f"Warning: Failed to update Google Sheets Portfolio Adjustments: {e}", file=sys.stderr)
 
 
 def compare_holdings_and_write_mismatches(project_root: str = ''):

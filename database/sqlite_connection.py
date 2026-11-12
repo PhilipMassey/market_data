@@ -84,4 +84,14 @@ def init_sqlite_db():
                 industry TEXT
             )
         """)
+        # Create period_rank_filter table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS period_rank_filter (
+                date TEXT NOT NULL,
+                period_step TEXT NOT NULL,
+                date_range TEXT,
+                tickers TEXT NOT NULL,
+                PRIMARY KEY (date, period_step)
+            )
+        """)
 

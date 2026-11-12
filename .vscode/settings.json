@@ -9,7 +9,9 @@
         "${workspaceFolder}"
     ],
     "terminal.integrated.env.osx": {
-        "PYTHONPATH": "${workspaceFolder}"
+        "PYTHONPATH": "${workspaceFolder}",
+        "GMAIL_USER": "philip.massey@gmail.com",
+        "GMAIL_APP_PASSWORD": "tenh copf clwm hwaq"
     },
     "files.exclude": {
         ".gitignore": true,

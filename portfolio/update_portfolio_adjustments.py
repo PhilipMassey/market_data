@@ -85,27 +85,11 @@ def df_clean_fidelity_for_worksheet(df: pd.DataFrame) -> pd.DataFrame:
     if 'Symbol' not in df.columns:
         return pd.DataFrame()
 
-    df = filter_out_cash_symbols(df, 'Symbol')
-
-    clean_numeric_columns(
-        df,
-        dollar_cols=['Current Value', 'Cost Basis Total', 'Average Cost Basis'],
-        numeric_cols=['Quantity'],
-    )
-
-    if 'Quantity' not in df.columns:
-        df['Quantity'] = 0.0
-
-    sum_df = df.groupby('Symbol').agg({
-        'Current Value': 'sum',
-        'Cost Basis Total': 'sum',
-        'Quantity': 'sum',
-        'Average Cost Basis': 'mean'
-    }).reset_index()
-
-    sum_df['Average Cost Basis'] = sum_df['Average Cost Basis'].round(2)
-    sum_df = sum_df.sort_values(by='Symbol').reset_index(drop=True)
-    return sum_df
+    agg_df = df_fidelity_positions_aggregate_columns(df)
+    agg_df = filter_out_cash_symbols(agg_df, 'Symbol')
+    agg_df['Average Cost Basis'] = agg_df['Average Cost Basis'].round(2)
+    agg_df = agg_df.sort_values(by='Symbol').reset_index(drop=True)
+    return agg_df
 
 
 def update_fidelity_positions_worksheet(

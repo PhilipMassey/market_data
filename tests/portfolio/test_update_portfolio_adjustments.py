@@ -66,6 +66,16 @@ def test_df_clean_fidelity_for_worksheet(sample_fidelity_csv_file):
 
     # Symbols aggregated across accounts: AAPL, ADX, MSFT, SPY
     assert list(sum_df['Symbol']) == ['AAPL', 'ADX', 'MSFT', 'SPY']
+    assert list(sum_df.columns) == [
+        'Symbol',
+        'Account Name',
+        'Quantity',
+        'Current Value',
+        'Cost Basis Total',
+        'Last Price',
+        'Average Cost Basis',
+        'Percent Of Account',
+    ]
 
     # AAPL was in both Stocks (10 qty, $1500) and Dividends (5 qty, $750) -> sum: 15 qty, $2250
     aapl_row = sum_df[sum_df['Symbol'] == 'AAPL'].iloc[0]

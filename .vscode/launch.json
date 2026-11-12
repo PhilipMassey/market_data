@@ -20,7 +20,7 @@
             }
         },
         {
-            "name": "Run: Load Holding Portfolios",
+            "name": "Run: Weekly Process Exports",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/portfolio/load_holding_portfolios.py",

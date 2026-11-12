@@ -20,7 +20,7 @@
             }
         },
         {
-            "label": "🐍 Weekly Load Holding Portfolios",
+            "label": "🐍 Weekly Process Exports",
             "type": "shell",
             "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
