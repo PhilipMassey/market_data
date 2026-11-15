@@ -2,10 +2,10 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-# Fallback to external database outside project directory
-SQLITE_DB_PATH = os.environ.get('SQLITE_DB_PATH')
-if not SQLITE_DB_PATH:
-    SQLITE_DB_PATH = '/Users/philipmassey/projects/.data/market_data.db'
+# Fallback to external database outside project directory (portable across macOS & Linux)
+SQLITE_DB_PATH = os.path.expanduser(
+    os.environ.get('SQLITE_DB_PATH') or '~/projects/.data/market_data.db'
+)
 
 @contextmanager
 def get_sqlite_conn():
@@ -14,6 +14,8 @@ def get_sqlite_conn():
     Automatically commits and closes the connection.
     """
     conn = sqlite3.connect(SQLITE_DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     try:
         yield conn
         conn.commit()

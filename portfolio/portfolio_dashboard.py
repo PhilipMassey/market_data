@@ -1,7 +1,15 @@
 import os
+import secrets
+import sys
+
+# Ensure project root is on sys.path even if PYTHONPATH contains an unexpanded '~'
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import numpy as np
 import pandas as pd
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request
 from database.sqlite_connection import get_sqlite_conn, init_sqlite_db
 from database.database_utils import (
     get_latest_price as _get_latest_price,
@@ -21,6 +29,30 @@ from portfolio.ticker_period_ranks_data import (
 
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
+
+
+@app.before_request
+def require_basic_auth():
+    """
+    If DASHBOARD_PASSWORD is set in the environment (e.g., on the Google Cloud VM),
+    require HTTP Basic Authentication before serving any route.
+    """
+    expected_pass = os.environ.get('DASHBOARD_PASSWORD')
+    if not expected_pass:
+        return None
+    expected_user = os.environ.get('DASHBOARD_USER', 'philip')
+    auth = request.authorization
+    if (
+        not auth
+        or not secrets.compare_digest(auth.username or '', expected_user)
+        or not secrets.compare_digest(auth.password or '', expected_pass)
+    ):
+        return Response(
+            'Authentication required',
+            401,
+            {'WWW-Authenticate': 'Basic realm="Portfolio Valuation Dashboard"'},
+        )
+    return None
 
 
 def get_latest_price(symbol: str) -> float:
@@ -506,5 +538,7 @@ def api_ticker_ranks_detail():
 if __name__ == '__main__':
     init_sqlite_db()
     # Force auto-reload to refresh all HTML templates and static assets (v1.0.5)
+    host = os.environ.get('HOST', '0.0.0.0')
     port = int(os.environ.get('PORT', 5001))
-    app.run(host='127.0.0.1', port=port, debug=True)
+    debug = os.environ.get('FLASK_DEBUG', '1').lower() not in ('0', 'false', 'no')
+    app.run(host=host, port=port, debug=debug)

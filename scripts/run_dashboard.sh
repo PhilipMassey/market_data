@@ -14,6 +14,13 @@ if [ ! -d ".venv" ]; then
     exit 1
 fi
 
+# Load optional dashboard credentials (.env.dashboard) if present
+if [ -f "$SCRIPT_DIR/.env.dashboard" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env.dashboard"
+    set +a
+fi
+
 # Set default port if not already set in the environment
 export PORT="${PORT:-5001}"
 
@@ -21,7 +28,7 @@ export PORT="${PORT:-5001}"
 if [ -n "$SQLITE_DB_PATH" ]; then
     echo "Using custom SQLITE_DB_PATH: $SQLITE_DB_PATH"
 else
-    DEFAULT_DB="/Users/philipmassey/projects/.data/market_data.db"
+    DEFAULT_DB="$HOME/projects/.data/market_data.db"
     echo "Using default database: $DEFAULT_DB"
 fi
 
@@ -31,8 +38,9 @@ echo "Open your browser and navigate to: http://127.0.0.1:$PORT"
 # Run the Flask app using the virtual environment's Python interpreter with nohup
 # We set PYTHONPATH to the project root so Python can resolve imports.
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+export FLASK_DEBUG="${FLASK_DEBUG:-0}"
 LOG_FILE="$SCRIPT_DIR/dashboard.log"
-nohup .venv/bin/python portfolio/portfolio_dashboard.py > "$LOG_FILE" 2>&1 &
+nohup .venv/bin/python portfolio/portfolio_dashboard.py > "$LOG_FILE" 2>&1 < /dev/null &
 PID=$!
 
 echo "Dashboard is running in the background (PID: $PID)."

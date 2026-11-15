@@ -10,4 +10,6 @@ tickers/**/*.csv
 
 # Database files
 *.db
+.env*
+
 

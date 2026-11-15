@@ -5,10 +5,10 @@ import glob
 from os.path import join
 from datetime import datetime
 import pandas as pd
-download_dir = os.environ.get('DOWNLOAD_DIR')
+download_dir = os.path.expanduser(os.environ.get('DOWNLOAD_DIR'))
 
 def fidelity_positions_filep():
-    files = glob.glob(download_dir + '/Portfolio_Positions*.csv')
+    files = glob.glob(join(download_dir, 'Portfolio_Positions*.csv'))
     if len(files) != 1:
         raise Exception("File size is not 1")
     fn = files[0]

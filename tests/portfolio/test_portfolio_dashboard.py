@@ -475,6 +475,25 @@ def test_api_ticker_ranks_daily_step(mock_get_ranked, mock_sqlite_db):
     mock_get_ranked.assert_called_with(daily_step=False)
 
 
+def test_basic_auth_when_password_configured(monkeypatch):
+    import base64
+    monkeypatch.setenv("DASHBOARD_USER", "philip")
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "secret123")
+
+    client = app.test_client()
+
+    # Unauthenticated request returns 401
+    resp_unauth = client.get("/")
+    assert resp_unauth.status_code == 401
+    assert "Basic" in resp_unauth.headers.get("WWW-Authenticate", "")
+
+    # Valid credentials return 200
+    token = base64.b64encode(b"philip:secret123").decode("ascii")
+    resp_ok = client.get("/", headers={"Authorization": f"Basic {token}"})
+    assert resp_ok.status_code == 200
+
+
+
 
 
 
