@@ -3,7 +3,7 @@ import smtplib
 from email.message import EmailMessage
 
 DEFAULT_RECIPIENT_EMAIL = "philip.massey@gmail.com"
-DEFAULT_APP_PASSWORD = "tenh copf clwm hwaq"
+DEFAULT_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 
 
 def send_email(

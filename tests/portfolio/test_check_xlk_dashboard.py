@@ -10,7 +10,6 @@ if PROJECT_ROOT not in sys.path:
 
 from stock_mdb.scripts.check_xlk_dashboard import main
 
-@patch("scripts.check_xlk_dashboard.get_db_prices")
 @patch("scripts.check_xlk_dashboard.get_yf_prices")
 @patch("sys.exit")
 def test_check_xlk_dashboard_success(mock_sys_exit, mock_get_yf, mock_get_db):
